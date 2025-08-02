@@ -11,20 +11,26 @@ uvx md-server
 ## Usage
 
 ```bash
-# Start server
+# Start server (default: localhost:8080)
 uvx md-server
 
+# Listen on all interfaces (for Docker/remote access)
+uvx md-server --host 0.0.0.0
+
+# Start on custom port
+uvx md-server --port 9000
+
 # Convert file
-curl -X POST http://localhost:8000/convert -F "file=@document.pdf"
+curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
 
 # Convert YouTube video
-curl -X POST http://localhost:8000/convert/url -d '{"url": "https://youtube.com/watch?v=..."}'
+curl -X POST http://localhost:8080/convert/url -d '{"url": "https://youtube.com/watch?v=..."}'
 
 # Convert web page
-curl -X POST http://localhost:8000/convert/url -d '{"url": "https://example.com/article"}'
+curl -X POST http://localhost:8080/convert/url -d '{"url": "https://example.com/article"}'
 
 # Health check
-curl http://localhost:8000/healthz
+curl http://localhost:8080/healthz
 ```
 
 ## Endpoints
@@ -43,10 +49,13 @@ cd md-server
 # Create virtual environment and install dependencies
 uv sync
 
-# Run development server
+# Run development server (localhost:8080)
 uv run python -m md_server
 # or
 uv run md-server
+
+# Run on custom port
+uv run md-server --port 9000
 
 # Run tests (when available)
 uv run pytest
