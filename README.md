@@ -1,6 +1,6 @@
 # md-server
 
-HTTP API server for converting files, documents, web pages, and multimedia content to markdown.
+HTTP API server for converting documents (PDF, Office document types), audio, web pages, Youtube videos and more to markdown.
 
 ## Installation
 
@@ -35,6 +35,7 @@ curl http://localhost:8080/healthz
 ## Example Output
 
 Convert a file to markdown:
+
 ```bash
 $ curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
 {
@@ -43,6 +44,7 @@ $ curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
 ```
 
 Health check response:
+
 ```bash
 $ curl http://localhost:8080/healthz
 {
