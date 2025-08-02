@@ -1,7 +1,13 @@
 [project]
 name = "md-server"
 version = "0.0.1"
-description = "Add your description here"
+description = "HTTP API server for document-to-markdown conversion"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[project.scripts]
+md-server = "md_server.__main__:main"

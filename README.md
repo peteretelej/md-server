@@ -27,11 +27,41 @@ curl http://localhost:8000/healthz
 - `POST /convert` - Convert uploaded file
 - `POST /convert/url` - Convert from URL
 
+## Response format
+
+- TBD
+
+## Development
+
+```bash
+# Clone repository
+git clone https://github.com/peteretelej/md-server.git
+cd md-server
+
+# Create virtual environment and install dependencies
+uv sync
+
+# Run development server
+uv run python -m md_server
+# or
+uv run md-server
+
+# Run tests (when available)
+uv run pytest
+
+# Add new dependencies
+uv add package-name
+
+# Add dev dependencies
+uv add --dev pytest ruff mypy
+```
+
 ## TODO
 
+- [x] Health endpoint for health check
 - [ ] API endpoints for file upload & conversion
+- [ ] Determine response format
 - [ ] Support for URL input
-- [ ] Health endpoint for health check
 - [ ] Format support validation: PDF, ppt, docx, excel etc
 - [ ] tests + 90%+ coverage
 - [ ] Dockerfile & run guidance
