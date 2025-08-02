@@ -1,10 +1,11 @@
 import asyncio
 from typing import Union, BinaryIO, Optional
 from pathlib import Path
+from io import BytesIO
 from ..core.exceptions import MarkdownConversionError, ConversionTimeoutError
 
 class MarkItDownAdapter:
-    """Async adapter for the MarkItDown library with timeout and error handling."""
+    """Async adapter for the MarkItDown library with stream-based conversion, timeout and error handling."""
     
     def __init__(
         self, 
@@ -47,7 +48,7 @@ class MarkItDownAdapter:
             raise MarkdownConversionError(f"Failed to convert file: {str(e)}")
     
     async def convert_content(self, content: bytes, filename: Optional[str] = None) -> str:
-        """Convert binary content to markdown.
+        """Convert binary content to markdown using stream-based conversion.
         
         Args:
             content: Binary content to convert
@@ -62,7 +63,7 @@ class MarkItDownAdapter:
         """
         try:
             return await asyncio.wait_for(
-                self._convert_content_sync(content, filename),
+                self._convert_stream_sync(content, filename),
                 timeout=self.timeout_seconds
             )
         except asyncio.TimeoutError:
@@ -70,13 +71,39 @@ class MarkItDownAdapter:
         except Exception as e:
             raise MarkdownConversionError(f"Failed to convert content: {str(e)}")
     
+    async def convert_stream(self, stream: BinaryIO, filename: Optional[str] = None) -> str:
+        """Convert binary stream to markdown.
+        
+        Args:
+            stream: Binary stream to convert
+            filename: Optional filename for format detection hints
+            
+        Returns:
+            Converted markdown content
+            
+        Raises:
+            ConversionTimeoutError: If conversion takes longer than timeout
+            MarkdownConversionError: If conversion fails
+        """
+        try:
+            content = stream.read()
+            stream.seek(0)  # Reset stream position
+            return await asyncio.wait_for(
+                self._convert_stream_sync(content, filename),
+                timeout=self.timeout_seconds
+            )
+        except asyncio.TimeoutError:
+            raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
+        except Exception as e:
+            raise MarkdownConversionError(f"Failed to convert stream: {str(e)}")
+    
     async def _convert_file_sync(self, file_path: Union[str, Path]) -> str:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._sync_convert_file, file_path)
     
-    async def _convert_content_sync(self, content: bytes, filename: Optional[str] = None) -> str:
+    async def _convert_stream_sync(self, content: bytes, filename: Optional[str] = None) -> str:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._sync_convert_content, content, filename)
+        return await loop.run_in_executor(None, self._sync_convert_stream, content, filename)
     
     def _sync_convert_file(self, file_path: Union[str, Path]) -> str:
         try:
@@ -112,7 +139,7 @@ class MarkItDownAdapter:
         except Exception as e:
             raise MarkdownConversionError(f"Unexpected conversion error: {str(e)}")
     
-    def _sync_convert_content(self, content: bytes, filename: Optional[str] = None) -> str:
+    def _sync_convert_stream(self, content: bytes, filename: Optional[str] = None) -> str:
         try:
             from markitdown import MarkItDown, StreamInfo
             from markitdown._exceptions import (
@@ -120,15 +147,13 @@ class MarkItDownAdapter:
                 FileConversionException,
                 MissingDependencyException
             )
-            import tempfile
-            import os
             
             md = MarkItDown(
                 enable_builtins=self.enable_builtins,
                 enable_plugins=self.enable_plugins
             )
             
-            # Create StreamInfo with hints
+            # Create StreamInfo with format detection hints
             stream_info = None
             if filename:
                 path = Path(filename)
@@ -137,15 +162,10 @@ class MarkItDownAdapter:
                     filename=filename
                 )
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}" if filename else "") as tmp_file:
-                tmp_file.write(content)
-                tmp_file.flush()
-                
-                try:
-                    result = md.convert(tmp_file.name, stream_info=stream_info)
-                    return result.markdown
-                finally:
-                    os.unlink(tmp_file.name)
+            # Use BytesIO for direct stream conversion without temporary files
+            with BytesIO(content) as stream:
+                result = md.convert_stream(stream, stream_info=stream_info)
+                return result.markdown
                     
         except ImportError:
             raise MarkdownConversionError("markitdown library not installed")
