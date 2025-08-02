@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "md-server"
 version = "0.0.1"
-description = "HTTP API server for document-to-markdown conversion"
+description = "HTTP API server for converting most content to markdown"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

@@ -23,14 +23,31 @@ uvx md-server --port 9000
 # Convert file
 curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
 
-# Convert YouTube video
-curl -X POST http://localhost:8080/convert/url -d '{"url": "https://youtube.com/watch?v=..."}'
-
-# Convert web page
-curl -X POST http://localhost:8080/convert/url -d '{"url": "https://example.com/article"}'
+# Convert URL
+curl -X POST http://localhost:8080/convert/url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/article"}'
 
 # Health check
 curl http://localhost:8080/healthz
+```
+
+## Example Output
+
+Convert a file to markdown:
+```bash
+$ curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
+{
+  "markdown": "# Document Title\n\nThis is the converted content from the PDF...\n\n## Section 1\n\nMore content here."
+}
+```
+
+Health check response:
+```bash
+$ curl http://localhost:8080/healthz
+{
+  "status": "ok"
+}
 ```
 
 ## Endpoints
