@@ -1,28 +1,41 @@
 import asyncio
-from typing import Union, BinaryIO, Optional
+from typing import Union, BinaryIO, Optional, List, Tuple
 from pathlib import Path
 from io import BytesIO
 from ..core.exceptions import MarkdownConversionError, ConversionTimeoutError
+from ..core.markitdown_config import MarkItDownConfig, get_markitdown_config
 
 class MarkItDownAdapter:
-    """Async adapter for the MarkItDown library with stream-based conversion, timeout and error handling."""
+    """Async adapter for the MarkItDown library with advanced configuration support."""
     
     def __init__(
         self, 
-        timeout_seconds: int = 30,
-        enable_plugins: bool = False,
-        enable_builtins: bool = True
+        config: Optional[MarkItDownConfig] = None,
+        timeout_seconds: Optional[int] = None,
+        enable_plugins: Optional[bool] = None,
+        enable_builtins: Optional[bool] = None
     ) -> None:
-        """Initialize adapter with conversion timeout and options.
+        """Initialize adapter with advanced configuration support.
         
         Args:
-            timeout_seconds: Maximum time to wait for conversion (default: 30)
-            enable_plugins: Enable 3rd-party plugins (default: False)
-            enable_builtins: Enable built-in converters (default: True)
+            config: MarkItDown configuration object (uses defaults if None)
+            timeout_seconds: Override timeout from config (backward compatibility)
+            enable_plugins: Override plugin setting from config (backward compatibility)
+            enable_builtins: Override builtins setting from config (backward compatibility)
         """
-        self.timeout_seconds = timeout_seconds
-        self.enable_plugins = enable_plugins
-        self.enable_builtins = enable_builtins
+        self.config = config or get_markitdown_config()
+        
+        # Allow parameter overrides for backward compatibility
+        if timeout_seconds is not None:
+            self.config.timeout_seconds = timeout_seconds
+        if enable_plugins is not None:
+            self.config.enable_plugins = enable_plugins
+        if enable_builtins is not None:
+            self.config.enable_builtins = enable_builtins
+        
+        self.timeout_seconds = self.config.timeout_seconds
+        self._markitdown_instance = None
+        self._custom_converters_registered = False
     
     async def convert_file(self, file_path: Union[str, Path]) -> str:
         """Convert a local file to markdown.
@@ -132,19 +145,48 @@ class MarkItDownAdapter:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._sync_convert_url, url)
     
+    def _get_markitdown_instance(self):
+        """Get or create MarkItDown instance with configuration."""
+        if self._markitdown_instance is None:
+            try:
+                from markitdown import MarkItDown
+                
+                # Create instance with configuration
+                kwargs = self.config.to_markitdown_kwargs()
+                self._markitdown_instance = MarkItDown(**kwargs)
+                
+                # Register custom converters
+                if not self._custom_converters_registered:
+                    self._register_custom_converters()
+                    self._custom_converters_registered = True
+                    
+            except ImportError:
+                raise MarkdownConversionError("markitdown library not installed")
+        
+        return self._markitdown_instance
+    
+    def _register_custom_converters(self):
+        """Register custom converters from configuration."""
+        if not self.config.custom_converters:
+            return
+            
+        try:
+            custom_converters = self.config.load_custom_converters()
+            for converter, priority in custom_converters:
+                self._markitdown_instance.register_converter(converter, priority=priority)
+        except Exception as e:
+            raise MarkdownConversionError(f"Failed to register custom converters: {str(e)}")
+    
     def _sync_convert_file(self, file_path: Union[str, Path]) -> str:
         try:
-            from markitdown import MarkItDown, StreamInfo
+            from markitdown import StreamInfo
             from markitdown._exceptions import (
                 UnsupportedFormatException,
                 FileConversionException,
                 MissingDependencyException
             )
             
-            md = MarkItDown(
-                enable_builtins=self.enable_builtins,
-                enable_plugins=self.enable_plugins
-            )
+            md = self._get_markitdown_instance()
             path = Path(file_path)
             
             stream_info = StreamInfo(
@@ -168,17 +210,14 @@ class MarkItDownAdapter:
     
     def _sync_convert_stream(self, content: bytes, filename: Optional[str] = None) -> str:
         try:
-            from markitdown import MarkItDown, StreamInfo
+            from markitdown import StreamInfo
             from markitdown._exceptions import (
                 UnsupportedFormatException,
                 FileConversionException,
                 MissingDependencyException
             )
             
-            md = MarkItDown(
-                enable_builtins=self.enable_builtins,
-                enable_plugins=self.enable_plugins
-            )
+            md = self._get_markitdown_instance()
             
             # Create StreamInfo with format detection hints
             stream_info = None
@@ -207,7 +246,7 @@ class MarkItDownAdapter:
     
     def _sync_convert_url(self, url: str) -> str:
         try:
-            from markitdown import MarkItDown, StreamInfo
+            from markitdown import StreamInfo
             from markitdown._exceptions import (
                 UnsupportedFormatException,
                 FileConversionException,
@@ -215,10 +254,7 @@ class MarkItDownAdapter:
             )
             from urllib.parse import urlparse
             
-            md = MarkItDown(
-                enable_builtins=self.enable_builtins,
-                enable_plugins=self.enable_plugins
-            )
+            md = self._get_markitdown_instance()
             
             # Create StreamInfo with URL metadata for better format detection
             parsed = urlparse(url)
@@ -245,3 +281,101 @@ class MarkItDownAdapter:
             raise MarkdownConversionError(f"URL conversion failed: {str(e)}")
         except Exception as e:
             raise MarkdownConversionError(f"Unexpected URL conversion error: {str(e)}")
+    
+    async def health_check(self) -> bool:
+        """Perform health check on MarkItDown dependencies and configuration.
+        
+        Returns:
+            True if all dependencies are available and configuration is valid
+            
+        Raises:
+            MarkdownConversionError: If dependencies are missing or configuration is invalid
+        """
+        try:
+            # Test basic MarkItDown import and initialization
+            md = self._get_markitdown_instance()
+            
+            # Test LLM client configuration if present
+            if self.config.llm_config:
+                llm_client = self.config.get_llm_client()
+                if llm_client is None:
+                    raise MarkdownConversionError("LLM client configuration invalid")
+            
+            # Test Azure Document Intelligence configuration if present
+            if self.config.azure_docintel_config:
+                credential = self.config.get_azure_docintel_credential()
+                if credential is None:
+                    raise MarkdownConversionError("Azure Document Intelligence configuration invalid")
+            
+            return True
+            
+        except Exception as e:
+            raise MarkdownConversionError(f"Health check failed: {str(e)}")
+    
+    def get_supported_formats(self) -> List[str]:
+        """Get list of supported file formats based on current configuration.
+        
+        Returns:
+            List of supported file extensions
+        """
+        try:
+            md = self._get_markitdown_instance()
+            
+            # Basic supported formats from built-in converters
+            formats = [
+                ".txt", ".md", ".html", ".htm", ".csv", ".json", ".xml",
+                ".zip", ".epub", ".ipynb", ".jpg", ".jpeg", ".png", ".bmp", ".gif"
+            ]
+            
+            # Add formats based on optional dependencies
+            try:
+                import pypdf
+                formats.extend([".pdf"])
+            except ImportError:
+                pass
+            
+            try:
+                import docx
+                formats.extend([".docx"])
+            except ImportError:
+                pass
+            
+            try:
+                import openpyxl
+                formats.extend([".xlsx"])
+            except ImportError:
+                pass
+            
+            try:
+                import xlrd
+                formats.extend([".xls"])
+            except ImportError:
+                pass
+            
+            try:
+                import pptx
+                formats.extend([".pptx"])
+            except ImportError:
+                pass
+            
+            return sorted(list(set(formats)))
+            
+        except Exception:
+            # Return minimal set if detection fails
+            return [".txt", ".md", ".html", ".csv", ".json"]
+    
+    def get_configuration_info(self) -> dict:
+        """Get information about current configuration.
+        
+        Returns:
+            Dictionary with configuration details
+        """
+        return {
+            "enable_builtins": self.config.enable_builtins,
+            "enable_plugins": self.config.enable_plugins,
+            "timeout_seconds": self.config.timeout_seconds,
+            "llm_enabled": self.config.llm_config is not None,
+            "azure_docintel_enabled": self.config.azure_docintel_config is not None,
+            "custom_converters_count": len(self.config.custom_converters),
+            "supported_formats": self.get_supported_formats()
+        }

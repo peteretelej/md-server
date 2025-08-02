@@ -84,17 +84,17 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 
 #### Tasks
 
-- [ ] Add configuration class for MarkItDown options
-- [ ] Implement LLM client configuration support
-- [ ] Add Azure Document Intelligence configuration
-- [ ] Add support for custom converter registration
-- [ ] Implement plugin system integration
-- [ ] Add configuration validation
-- [ ] Update constructor to accept configuration parameters
-- [ ] Add environment variable support for sensitive configurations
-- [ ] Test configuration options work correctly
-- [ ] Run tests and verify advanced features
-- [ ] Mark Phase 4 complete
+- [x] Add configuration class for MarkItDown options
+- [x] Implement LLM client configuration support
+- [x] Add Azure Document Intelligence configuration
+- [x] Add support for custom converter registration
+- [x] Implement plugin system integration
+- [x] Add configuration validation
+- [x] Update constructor to accept configuration parameters
+- [x] Add environment variable support for sensitive configurations
+- [x] Test configuration options work correctly
+- [x] Run tests and verify advanced features
+- [x] Mark Phase 4 complete
 
 **Expected Outcome**: Adapter supports full MarkItDown configuration including LLM and Azure integration
 

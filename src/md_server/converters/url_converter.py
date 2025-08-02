@@ -1,12 +1,16 @@
 from .base_converter import BaseConverter
 from ..adapters.markitdown_adapter import MarkItDownAdapter
+from ..core.markitdown_config import MarkItDownConfig
 from urllib.parse import urlparse
 import re
 
 class URLConverter(BaseConverter):
-    def __init__(self, settings):
+    def __init__(self, settings, markitdown_config: MarkItDownConfig = None):
         super().__init__(settings)
-        self.adapter = MarkItDownAdapter(timeout_seconds=settings.timeout_seconds)
+        self.adapter = MarkItDownAdapter(
+            config=markitdown_config,
+            timeout_seconds=settings.timeout_seconds
+        )
     
     async def convert(self, url: str) -> str:
         # Validate URL before conversion
