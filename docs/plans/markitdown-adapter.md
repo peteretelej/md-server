@@ -7,6 +7,7 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 ## Current Issues Analysis
 
 ### Critical Issues
+
 - **Deprecated API**: Uses `result.text_content` instead of `result.markdown`
 - **Inefficient Processing**: Creates temporary files for content conversion instead of using stream API
 - **Missing URL Support**: No implementation for `/convert/url` endpoint requirement
@@ -15,6 +16,7 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 - **No Configuration**: Missing support for MarkItDown's extensive configuration options
 
 ### Missing Features
+
 - Direct stream conversion without temporary files
 - URL conversion capability
 - StreamInfo metadata utilization
@@ -25,9 +27,11 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 ## Implementation Plan
 
 ### Phase 1: Core API Updates
+
 **Goal**: Fix deprecated API usage and improve basic functionality
 
 #### Tasks
+
 - [x] Replace `result.text_content` with `result.markdown` in both conversion methods
 - [x] Add proper StreamInfo import and usage with format detection hints
 - [x] Add proper exception imports and mapping from MarkItDown library
@@ -40,9 +44,11 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 **Expected Outcome**: Adapter uses current MarkItDown API and has better error reporting
 
 ### Phase 2: Stream-Based Content Conversion
+
 **Goal**: Eliminate temporary file creation for content conversion
 
 #### Tasks
+
 - [x] Implement `convert_stream` method using MarkItDown's `convert_stream` API
 - [x] Replace temporary file approach in `convert_content` with direct stream conversion
 - [x] Add StreamInfo creation from filename parameter for better format detection
@@ -55,25 +61,29 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 **Expected Outcome**: Content conversion uses streams directly, improving performance and eliminating temporary files
 
 ### Phase 3: URL Conversion Support
+
 **Goal**: Add URL conversion capability for `/convert/url` endpoint
 
 #### Tasks
-- [ ] Implement `convert_url` method using MarkItDown's `convert` method with URL support
-- [ ] Add URL validation and sanitization
-- [ ] Implement proper timeout handling for URL fetching
-- [ ] Add support for custom headers if needed
-- [ ] Handle URL-specific errors (network issues, invalid URLs, etc.)
-- [ ] Add StreamInfo support for URL conversions
-- [ ] Test URL conversion with various document types
-- [ ] Run tests and verify URL conversion works correctly
-- [ ] Mark Phase 3 complete
+
+- [x] Implement `convert_url` method using MarkItDown's `convert` method with URL support
+- [x] Add URL validation and sanitization
+- [x] Implement proper timeout handling for URL fetching
+- [x] Add support for custom headers if needed
+- [x] Handle URL-specific errors (network issues, invalid URLs, etc.)
+- [x] Add StreamInfo support for URL conversions
+- [x] Test URL conversion with various document types
+- [x] Run tests and verify URL conversion works correctly
+- [x] Mark Phase 3 complete
 
 **Expected Outcome**: Adapter supports URL conversion for all MarkItDown-supported URL formats
 
 ### Phase 4: Advanced Configuration Support
+
 **Goal**: Add support for MarkItDown's advanced configuration options
 
 #### Tasks
+
 - [ ] Add configuration class for MarkItDown options
 - [ ] Implement LLM client configuration support
 - [ ] Add Azure Document Intelligence configuration
@@ -89,9 +99,11 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 **Expected Outcome**: Adapter supports full MarkItDown configuration including LLM and Azure integration
 
 ### Phase 5: Performance and Reliability Improvements
+
 **Goal**: Optimize performance and improve reliability
 
 #### Tasks
+
 - [ ] Add connection pooling for URL conversions using custom requests session
 - [ ] Implement proper resource cleanup for all conversion methods
 - [ ] Add retry logic for transient failures
@@ -106,9 +118,11 @@ Comprehensive plan to improve the MarkItDown adapter implementation to leverage 
 **Expected Outcome**: Adapter is optimized for production use with proper error recovery and monitoring
 
 ### Phase 6: Code Quality and Documentation
+
 **Goal**: Simplify code structure and ensure maintainability
 
 #### Tasks
+
 - [ ] Review all new code for simplicity and clarity
 - [ ] Refactor any complex methods into smaller, focused functions
 - [ ] Ensure consistent async/await patterns throughout
@@ -131,16 +145,16 @@ class MarkItDownAdapter:
     def __init__(self, config: MarkItDownConfig = None, timeout_seconds: int = 30):
         # Initialize MarkItDown instance with configuration
         # Set up session management and timeouts
-        
+
     async def convert_file(self, file_path: Union[str, Path], stream_info: StreamInfo = None) -> str:
         # Convert local file using convert_local
-        
+
     async def convert_content(self, content: bytes, filename: str = None, mimetype: str = None) -> str:
         # Convert using convert_stream with BytesIO
-        
+
     async def convert_url(self, url: str, stream_info: StreamInfo = None) -> str:
         # Convert URL using convert method
-        
+
     async def health_check(self) -> bool:
         # Validate MarkItDown dependencies
 ```
@@ -174,6 +188,7 @@ class MarkItDownConfig:
 ## Success Criteria
 
 ### Functional Requirements
+
 - All conversion methods work without temporary files
 - URL conversion supports all MarkItDown-compatible URLs
 - StreamInfo metadata improves conversion accuracy
@@ -181,12 +196,14 @@ class MarkItDownConfig:
 - Error handling provides clear, actionable messages
 
 ### Performance Requirements
+
 - Content conversion shows measurable performance improvement
 - Memory usage remains stable for large files
 - URL conversion completes within timeout limits
 - No resource leaks in any conversion path
 
 ### Quality Requirements
+
 - Code is simple, clear, and maintainable
 - Full async compatibility with FastAPI
 - Comprehensive error handling
@@ -195,18 +212,21 @@ class MarkItDownConfig:
 ## Testing Strategy
 
 ### Unit Tests
+
 - Test each conversion method independently
 - Verify error handling for all failure modes
 - Test configuration options thoroughly
 - Validate StreamInfo usage improves results
 
 ### Integration Tests
+
 - Test with real files of various formats
 - Verify URL conversion with live URLs
 - Test timeout and error scenarios
 - Validate memory usage patterns
 
 ### Performance Tests
+
 - Compare before/after conversion times
 - Measure memory usage during conversion
 - Test with large files and concurrent requests
@@ -215,16 +235,19 @@ class MarkItDownConfig:
 ## Risk Mitigation
 
 ### Compatibility Risks
+
 - Maintain existing method signatures
 - Preserve error types for backward compatibility
 - Test with existing integration points
 
 ### Performance Risks
+
 - Monitor memory usage during stream conversion
 - Implement proper timeout handling
 - Add circuit breaker for problematic URLs
 
 ### Security Risks
+
 - Validate URLs before conversion
 - Implement resource limits for large files
 - Sanitize file paths and URLs properly

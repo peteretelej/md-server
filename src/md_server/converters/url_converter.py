@@ -1,7 +1,7 @@
-import httpx
 from .base_converter import BaseConverter
 from ..adapters.markitdown_adapter import MarkItDownAdapter
-from ..core.exceptions import URLFetchError
+from urllib.parse import urlparse
+import re
 
 class URLConverter(BaseConverter):
     def __init__(self, settings):
@@ -9,21 +9,23 @@ class URLConverter(BaseConverter):
         self.adapter = MarkItDownAdapter(timeout_seconds=settings.timeout_seconds)
     
     async def convert(self, url: str) -> str:
-        content = await self._fetch_url_content(url)
-        return await self.adapter.convert_content(content, filename=self._get_filename_from_url(url))
+        # Validate URL before conversion
+        validated_url = self._validate_url(url)
+        return await self.adapter.convert_url(validated_url)
     
-    async def _fetch_url_content(self, url: str) -> bytes:
+    def _validate_url(self, url: str) -> str:
+        """Validate and sanitize URL."""
+        if not url:
+            raise ValueError("URL cannot be empty")
+        
+        # Basic URL validation
+        if not re.match(r'^https?://', url):
+            raise ValueError("URL must start with http:// or https://")
+        
         try:
-            async with httpx.AsyncClient(timeout=self.settings.timeout_seconds) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                return response.content
-        except httpx.HTTPError as e:
-            raise URLFetchError(f"Failed to fetch URL: {str(e)}")
+            parsed = urlparse(url)
+            if not parsed.netloc:
+                raise ValueError("Invalid URL: missing network location")
+            return url
         except Exception as e:
-            raise URLFetchError(f"Unexpected error fetching URL: {str(e)}")
-    
-    def _get_filename_from_url(self, url: str) -> str:
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        return parsed.path.split('/')[-1] if parsed.path else "document"
+            raise ValueError(f"Invalid URL format: {str(e)}")

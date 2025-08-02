@@ -97,6 +97,29 @@ class MarkItDownAdapter:
         except Exception as e:
             raise MarkdownConversionError(f"Failed to convert stream: {str(e)}")
     
+    async def convert_url(self, url: str) -> str:
+        """Convert a URL to markdown using MarkItDown's native URL support.
+        
+        Args:
+            url: URL to convert
+            
+        Returns:
+            Converted markdown content
+            
+        Raises:
+            ConversionTimeoutError: If conversion takes longer than timeout
+            MarkdownConversionError: If conversion fails
+        """
+        try:
+            return await asyncio.wait_for(
+                self._convert_url_sync(url),
+                timeout=self.timeout_seconds
+            )
+        except asyncio.TimeoutError:
+            raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
+        except Exception as e:
+            raise MarkdownConversionError(f"Failed to convert URL: {str(e)}")
+    
     async def _convert_file_sync(self, file_path: Union[str, Path]) -> str:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._sync_convert_file, file_path)
@@ -104,6 +127,10 @@ class MarkItDownAdapter:
     async def _convert_stream_sync(self, content: bytes, filename: Optional[str] = None) -> str:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._sync_convert_stream, content, filename)
+    
+    async def _convert_url_sync(self, url: str) -> str:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._sync_convert_url, url)
     
     def _sync_convert_file(self, file_path: Union[str, Path]) -> str:
         try:
@@ -177,3 +204,44 @@ class MarkItDownAdapter:
             raise MarkdownConversionError(f"File conversion failed: {str(e)}")
         except Exception as e:
             raise MarkdownConversionError(f"Unexpected conversion error: {str(e)}")
+    
+    def _sync_convert_url(self, url: str) -> str:
+        try:
+            from markitdown import MarkItDown, StreamInfo
+            from markitdown._exceptions import (
+                UnsupportedFormatException,
+                FileConversionException,
+                MissingDependencyException
+            )
+            from urllib.parse import urlparse
+            
+            md = MarkItDown(
+                enable_builtins=self.enable_builtins,
+                enable_plugins=self.enable_plugins
+            )
+            
+            # Create StreamInfo with URL metadata for better format detection
+            parsed = urlparse(url)
+            filename = parsed.path.split('/')[-1] if parsed.path else "document"
+            path = Path(filename) if filename else None
+            
+            stream_info = StreamInfo(
+                url=url,
+                extension=path.suffix.lower() if path and path.suffix else None,
+                filename=filename if filename else None
+            )
+            
+            # Use MarkItDown's native URL conversion
+            result = md.convert(url, stream_info=stream_info)
+            return result.markdown
+            
+        except ImportError:
+            raise MarkdownConversionError("markitdown library not installed")
+        except UnsupportedFormatException as e:
+            raise MarkdownConversionError(f"Unsupported URL format: {str(e)}")
+        except MissingDependencyException as e:
+            raise MarkdownConversionError(f"Missing required dependency: {str(e)}")
+        except FileConversionException as e:
+            raise MarkdownConversionError(f"URL conversion failed: {str(e)}")
+        except Exception as e:
+            raise MarkdownConversionError(f"Unexpected URL conversion error: {str(e)}")
