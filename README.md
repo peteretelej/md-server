@@ -1,6 +1,6 @@
 # md-server
 
-HTTP API server for document-to-markdown conversion.
+HTTP API server for converting files, documents, web pages, and multimedia content to markdown.
 
 ## Installation
 
@@ -17,6 +17,12 @@ uvx md-server
 # Convert file
 curl -X POST http://localhost:8000/convert -F "file=@document.pdf"
 
+# Convert YouTube video
+curl -X POST http://localhost:8000/convert/url -d '{"url": "https://youtube.com/watch?v=..."}'
+
+# Convert web page
+curl -X POST http://localhost:8000/convert/url -d '{"url": "https://example.com/article"}'
+
 # Health check
 curl http://localhost:8000/healthz
 ```
@@ -24,12 +30,8 @@ curl http://localhost:8000/healthz
 ## Endpoints
 
 - `GET /healthz` - Health check
-- `POST /convert` - Convert uploaded file
-- `POST /convert/url` - Convert from URL
-
-## Response format
-
-- TBD
+- `POST /convert` - Convert uploaded file to markdown
+- `POST /convert/url` - Convert content from URL to markdown
 
 ## Development
 
