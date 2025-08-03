@@ -1,5 +1,12 @@
 # md-server
 
+[![CI](https://github.com/peteretelej/md-server/actions/workflows/ci.yml/badge.svg)](https://github.com/peteretelej/md-server/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/peteretelej/md-server/branch/main/graph/badge.svg)](https://codecov.io/gh/peteretelej/md-server)
+[![PyPI version](https://img.shields.io/pypi/v/md-server.svg)](https://pypi.org/project/md-server/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+
 HTTP API server for converting documents (PDF, Office document types), audio, web pages, Youtube videos and more to markdown.
 
 ## Installation
