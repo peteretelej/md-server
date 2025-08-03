@@ -99,13 +99,13 @@ omit = ["tests/*", "src/md_server/__main__.py"]
 
 ### Phase 4: Test Data and Fixtures
 
-- [ ] Update tests/test_data/conftest.py with test vectors
-  - [ ] Create FileTestVector dataclass
-  - [ ] Add test vectors for PDF, DOCX, PPTX, HTML files
-  - [ ] Add FastAPI test client fixture
-  - [ ] Add mock configuration fixtures
-- [ ] Verify test files are available (already copied from markitdown)
-- [ ] Test fixtures work: `uv run pytest tests/test_data/ -v`
+- [x] Update tests/test_data/conftest.py with test vectors
+  - [x] Create FileTestVector dataclass
+  - [x] Add test vectors for PDF, DOCX, PPTX, HTML files
+  - [x] Add FastAPI test client fixture
+  - [x] Add mock configuration fixtures
+- [x] Verify test files are available (already copied from markitdown)
+- [x] Test fixtures work: `uv run pytest tests/test_data/ -v`
 
 **Key test files:** PDF, DOCX, PPTX, HTML, images, audio, unsupported formats
 

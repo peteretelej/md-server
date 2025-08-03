@@ -1,12 +1,15 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
 from md_server.main import app
+from md_server.core.config import Settings
+from md_server.core.markitdown_config import MarkItDownConfig
 
 
 @dataclass
@@ -38,7 +41,7 @@ def client() -> TestClient:
 @pytest.fixture
 async def async_client() -> AsyncClient:
     """Async HTTP client for testing."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
@@ -139,4 +142,49 @@ def sample_files(test_data_dir: Path) -> Dict[str, Path]:
         "jpg": test_data_dir / "test.jpg",
         "html": test_data_dir / "test_blog.html",
         "unsupported": test_data_dir / "random.bin"
+    }
+
+
+@pytest.fixture
+def mock_settings() -> Settings:
+    """Mock settings for testing."""
+    return Settings(
+        max_file_size=10 * 1024 * 1024,  # 10MB for testing
+        timeout_seconds=5,
+        allowed_file_types=[
+            "text/plain",
+            "text/html",
+            "text/markdown",
+            "application/pdf",
+            "application/json"
+        ]
+    )
+
+
+@pytest.fixture
+def mock_markitdown_config() -> MarkItDownConfig:
+    """Mock MarkItDown configuration for testing."""
+    return MarkItDownConfig(
+        enable_builtins=True,
+        enable_plugins=False,
+        timeout_seconds=30
+    )
+
+
+@pytest.fixture
+def mock_converter():
+    """Mock converter for testing."""
+    mock = Mock()
+    mock.convert.return_value = "# Test Content\n\nThis is mock converted content."
+    return mock
+
+
+@pytest.fixture
+def test_file_content() -> Dict[str, bytes]:
+    """Sample file content for testing."""
+    return {
+        "text": b"Hello World\nThis is a test file.",
+        "json": b'{"message": "Hello World", "status": "test"}',
+        "html": b"<html><body><h1>Test</h1><p>Content</p></body></html>",
+        "empty": b""
     }
