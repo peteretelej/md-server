@@ -73,7 +73,6 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
 omit = ["tests/*", "src/md_server/__main__.py"]
 branch = true
 
