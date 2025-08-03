@@ -79,23 +79,23 @@ omit = ["tests/*", "src/md_server/__main__.py"]
 
 ### Phase 3: Integration Test Suite
 
-- [ ] Create tests/integration/test_health_api.py
-  - [ ] Test GET /healthz endpoint 
-  - [ ] Test response format validation
-  - [ ] Test service availability checking
-- [ ] Create tests/integration/test_convert_file_api.py
-  - [ ] Test POST /convert with file uploads
-  - [ ] Test supported file types using test vectors
-  - [ ] Test file size limits and error responses
-  - [ ] Test content validation (must_include/must_not_include)
-  - [ ] Test timeout handling for large files
-- [ ] Create tests/integration/test_convert_url_api.py
-  - [ ] Test POST /convert/url endpoint
-  - [ ] Test URL validation and sanitization
-  - [ ] Test content validation for web content
-  - [ ] Test error handling for invalid URLs
-  - [ ] Test network timeout scenarios
-- [ ] Run integration tests: `uv run pytest tests/integration/ -v`
+- [x] Create tests/integration/test_health_api.py
+  - [x] Test GET /healthz endpoint 
+  - [x] Test response format validation
+  - [x] Test service availability checking
+- [x] Create tests/integration/test_convert_file_api.py
+  - [x] Test POST /convert with file uploads
+  - [x] Test supported file types using test vectors
+  - [x] Test file size limits and error responses
+  - [x] Test content validation (must_include/must_not_include)
+  - [x] Test timeout handling for large files
+- [x] Create tests/integration/test_convert_url_api.py
+  - [x] Test POST /convert/url endpoint
+  - [x] Test URL validation and sanitization
+  - [x] Test content validation for web content
+  - [x] Test error handling for invalid URLs
+  - [x] Test network timeout scenarios
+- [x] Run integration tests: `uv run pytest tests/integration/ -v`
 
 ### Phase 4: Test Data and Fixtures
 
