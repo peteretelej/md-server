@@ -1,7 +1,5 @@
 coverage:
-  paths:
-    - src/
-  
+  range: 50..100
   status:
     project:
       default:
