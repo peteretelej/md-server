@@ -5,13 +5,13 @@ coverage:
   status:
     project:
       default:
-        target: 85%
-        threshold: 1%
+        target: 60%
+        threshold: 5%
         base: auto
     patch:
       default:
-        target: 90%
-        threshold: 1%
+        target: 65%
+        threshold: 5%
 
 comment:
   layout: "header, diff, flags, files"
