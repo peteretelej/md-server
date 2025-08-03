@@ -37,12 +37,12 @@ tests/
 
 ### Phase 1: Test Infrastructure Setup
 
-- [ ] Add test dependencies: `uv add --dev pytest-asyncio pytest-cov httpx`
-- [ ] Configure pytest in pyproject.toml
-- [ ] Set up coverage configuration  
-- [ ] Create tests/test_data/conftest.py with fixtures
-- [ ] Add test vectors for file validation
-- [ ] Test pytest runs: `uv run pytest --version`
+- [x] Add test dependencies: `uv add --dev pytest-asyncio pytest-cov httpx`
+- [x] Configure pytest in pyproject.toml
+- [x] Set up coverage configuration  
+- [x] Create tests/test_data/conftest.py with fixtures
+- [x] Add test vectors for file validation
+- [x] Test pytest runs: `uv run pytest --version`
 
 **pyproject.toml additions:**
 ```toml
