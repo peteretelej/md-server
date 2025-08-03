@@ -106,14 +106,3 @@ uv add --dev pytest ruff mypy
 docker build -t md-server .
 docker run -p 8080:8080 md-server
 ```
-
-## TODO
-
-- [x] Health endpoint for health check
-- [x] API endpoints for file upload & conversion
-- [x] Determine response format
-- [x] Support for URL input
-- [x] Format support validation: PDF, ppt, docx, excel etc
-- [x] tests + 90%+ coverage
-- [x] CI/CD for repo + PyPI publishing
-- [x] Dockerfile & run guidance
