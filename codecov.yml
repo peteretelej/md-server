@@ -1,0 +1,19 @@
+coverage:
+  paths:
+    - src/
+  
+  status:
+    project:
+      default:
+        target: 60%
+        threshold: 5%
+        base: auto
+    patch:
+      default:
+        target: 65%
+        threshold: 5%
+
+comment:
+  layout: "header, diff, flags, files"
+  behavior: default
+  require_changes: false
