@@ -63,19 +63,19 @@ omit = ["tests/*", "src/md_server/__main__.py"]
 
 ### Phase 2: Core Unit Tests
 
-- [ ] Create tests/unit/test_config.py
-  - [ ] Test settings initialization and defaults
-  - [ ] Test environment variable overrides
-  - [ ] Test file type/size validation
-- [ ] Create tests/unit/test_markitdown_adapter.py  
-  - [ ] Test adapter initialization with configs
-  - [ ] Test timeout and retry logic
-  - [ ] Test error handling and exception mapping
-  - [ ] Test health check functionality
-- [ ] Create tests/unit/test_exceptions.py
-  - [ ] Test custom exception types and messages
-  - [ ] Test exception inheritance
-- [ ] Run unit tests: `uv run pytest tests/unit/ -v`
+- [x] Create tests/unit/test_config.py
+  - [x] Test settings initialization and defaults
+  - [x] Test environment variable overrides
+  - [x] Test file type/size validation
+- [x] Create tests/unit/test_markitdown_adapter.py  
+  - [x] Test adapter initialization with configs
+  - [x] Test timeout and retry logic
+  - [x] Test error handling and exception mapping
+  - [x] Test health check functionality
+- [x] Create tests/unit/test_exceptions.py
+  - [x] Test custom exception types and messages
+  - [x] Test exception inheritance
+- [x] Run unit tests: `uv run pytest tests/unit/ -v`
 
 ### Phase 3: Integration Test Suite
 
