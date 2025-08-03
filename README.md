@@ -93,13 +93,27 @@ uv add package-name
 uv add --dev pytest ruff mypy
 ```
 
+### Docker
+
+```bash
+# Build and run (default port 8080)
+./scripts/docker.sh
+
+# Custom port
+./scripts/docker.sh 9000
+
+# Manual Docker commands
+docker build -t md-server .
+docker run -p 8080:8080 md-server
+```
+
 ## TODO
 
 - [x] Health endpoint for health check
-- [ ] API endpoints for file upload & conversion
-- [ ] Determine response format
-- [ ] Support for URL input
-- [ ] Format support validation: PDF, ppt, docx, excel etc
-- [ ] tests + 90%+ coverage
-- [ ] Dockerfile & run guidance
-- [ ] CI/CD for for repo + PyPI publishing
+- [x] API endpoints for file upload & conversion
+- [x] Determine response format
+- [x] Support for URL input
+- [x] Format support validation: PDF, ppt, docx, excel etc
+- [x] tests + 90%+ coverage
+- [x] CI/CD for repo + PyPI publishing
+- [x] Dockerfile & run guidance
