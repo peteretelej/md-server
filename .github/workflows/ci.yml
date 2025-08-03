@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Fast checks first
+  lint-and-type:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: uv sync --dev
+      
+      - name: Run linting
+        run: uv run ruff check .
+      
+      - name: Check formatting
+        run: uv run ruff format --check
+
+  # Unit tests - no external services
+  test-unit:
+    name: Unit Tests
+    runs-on: ${{ matrix.os }}
+    needs: lint-and-type
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+        exclude:
+          # Reduce matrix on non-Linux to save resources
+          - os: macos-latest
+            python-version: "3.10"
+          - os: windows-latest
+            python-version: "3.12"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: uv sync --dev
+      
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v --tb=short
+
+  # Integration tests with coverage
+  test-integration:
+    name: Integration Tests & Coverage
+    runs-on: ubuntu-latest
+    needs: [lint-and-type, test-unit]
+    # Only run on main branch, PRs to main, or when forced
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      contains(github.event.head_commit.message, '[integration]')
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: uv sync --dev
+      
+      - name: Run all tests with coverage
+        run: |
+          uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -v
+
+  # Server startup test
+  test-server-startup:
+    name: Server Startup Test
+    runs-on: ubuntu-latest
+    needs: test-unit
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: uv sync --dev
+      
+      - name: Test server startup
+        run: |
+          timeout 5s uv run python -m md_server --port 9999 || exit_code=$?
+          if [ "${exit_code:-0}" -eq 124 ]; then
+            echo "✓ Server started successfully (timeout expected)"
+            exit 0
+          elif [ "${exit_code:-0}" -eq 0 ]; then
+            echo "✓ Server started and exited cleanly"
+            exit 0
+          else
+            echo "✗ Server failed to start (exit code: ${exit_code:-0})"
+            exit 1
+          fi

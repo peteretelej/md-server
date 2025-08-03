@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from unittest.mock import Mock
 
 import pytest
@@ -15,6 +15,7 @@ from md_server.core.markitdown_config import MarkItDownConfig
 @dataclass
 class FileTestVector:
     """Test vector for file conversion validation."""
+
     filename: str
     content_type: str
     must_include: List[str]
@@ -41,7 +42,9 @@ def client() -> TestClient:
 @pytest.fixture
 async def async_client() -> AsyncClient:
     """Async HTTP client for testing."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
         yield ac
 
 
@@ -52,59 +55,57 @@ def file_test_vectors() -> Dict[str, FileTestVector]:
         "pdf": FileTestVector(
             filename="test.pdf",
             content_type="application/pdf",
-            must_include=["# Test PDF", "sample document"]
+            must_include=["# Test PDF", "sample document"],
         ),
         "docx": FileTestVector(
             filename="test.docx",
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            must_include=["This is a test document"]
+            must_include=["This is a test document"],
         ),
         "docx_equations": FileTestVector(
             filename="equations.docx",
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            must_include=["equation", "formula"]
+            must_include=["equation", "formula"],
         ),
         "docx_comments": FileTestVector(
             filename="test_with_comment.docx",
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            must_include=["comment"]
+            must_include=["comment"],
         ),
         "pptx": FileTestVector(
             filename="test.pptx",
             content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            must_include=["slide", "presentation"]
+            must_include=["slide", "presentation"],
         ),
         "xlsx": FileTestVector(
             filename="test.xlsx",
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            must_include=["data", "table"]
+            must_include=["data", "table"],
         ),
         "epub": FileTestVector(
             filename="test.epub",
             content_type="application/epub+zip",
-            must_include=["chapter", "book"]
+            must_include=["chapter", "book"],
         ),
         "jpg": FileTestVector(
-            filename="test.jpg",
-            content_type="image/jpeg",
-            must_include=["image"]
+            filename="test.jpg", content_type="image/jpeg", must_include=["image"]
         ),
         "html_blog": FileTestVector(
             filename="test_blog.html",
             content_type="text/html",
-            must_include=["blog", "article"]
+            must_include=["blog", "article"],
         ),
         "html_wikipedia": FileTestVector(
             filename="test_wikipedia.html",
             content_type="text/html",
-            must_include=["wikipedia"]
+            must_include=["wikipedia"],
         ),
         "unsupported": FileTestVector(
             filename="random.bin",
             content_type="application/octet-stream",
             must_include=[],
-            expected_status=415
-        )
+            expected_status=415,
+        ),
     }
 
 
@@ -115,18 +116,14 @@ def url_test_vectors() -> Dict[str, Dict]:
         "valid_webpage": {
             "url": "https://httpbin.org/html",
             "must_include": ["html", "Herman Melville"],
-            "expected_status": 200
+            "expected_status": 200,
         },
-        "invalid_url": {
-            "url": "not-a-url",
-            "must_include": [],
-            "expected_status": 400
-        },
+        "invalid_url": {"url": "not-a-url", "must_include": [], "expected_status": 400},
         "nonexistent_url": {
             "url": "https://nonexistent-domain-12345.com",
             "must_include": [],
-            "expected_status": 400
-        }
+            "expected_status": 400,
+        },
     }
 
 
@@ -141,7 +138,7 @@ def sample_files(test_data_dir: Path) -> Dict[str, Path]:
         "epub": test_data_dir / "test.epub",
         "jpg": test_data_dir / "test.jpg",
         "html": test_data_dir / "test_blog.html",
-        "unsupported": test_data_dir / "random.bin"
+        "unsupported": test_data_dir / "random.bin",
     }
 
 
@@ -156,8 +153,8 @@ def mock_settings() -> Settings:
             "text/html",
             "text/markdown",
             "application/pdf",
-            "application/json"
-        ]
+            "application/json",
+        ],
     )
 
 
@@ -165,9 +162,7 @@ def mock_settings() -> Settings:
 def mock_markitdown_config() -> MarkItDownConfig:
     """Mock MarkItDown configuration for testing."""
     return MarkItDownConfig(
-        enable_builtins=True,
-        enable_plugins=False,
-        timeout_seconds=30
+        enable_builtins=True, enable_plugins=False, timeout_seconds=30
     )
 
 
@@ -186,5 +181,5 @@ def test_file_content() -> Dict[str, bytes]:
         "text": b"Hello World\nThis is a test file.",
         "json": b'{"message": "Hello World", "status": "test"}',
         "html": b"<html><body><h1>Test</h1><p>Content</p></body></html>",
-        "empty": b""
+        "empty": b"",
     }

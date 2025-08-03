@@ -28,7 +28,7 @@ def test_file_test_vectors_fixture(file_test_vectors):
     assert "pdf" in file_test_vectors
     assert "docx" in file_test_vectors
     assert "html_blog" in file_test_vectors
-    
+
     pdf_vector = file_test_vectors["pdf"]
     assert pdf_vector.filename == "test.pdf"
     assert pdf_vector.content_type == "application/pdf"
@@ -72,6 +72,6 @@ def test_test_file_content_fixture(test_file_content):
     assert "json" in test_file_content
     assert "html" in test_file_content
     assert "empty" in test_file_content
-    
+
     assert test_file_content["text"] == b"Hello World\nThis is a test file."
     assert test_file_content["empty"] == b""

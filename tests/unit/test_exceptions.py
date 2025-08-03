@@ -4,7 +4,7 @@ from md_server.core.exceptions import (
     UnsupportedFileTypeError,
     FileTooLargeError,
     URLFetchError,
-    ConversionTimeoutError
+    ConversionTimeoutError,
 )
 
 
@@ -15,7 +15,7 @@ class TestMarkdownConversionError:
     def test_can_be_raised_with_message(self):
         with pytest.raises(MarkdownConversionError) as exc_info:
             raise MarkdownConversionError("test error message")
-        
+
         assert str(exc_info.value) == "test error message"
 
     def test_can_be_raised_without_message(self):
@@ -30,7 +30,7 @@ class TestUnsupportedFileTypeError:
     def test_can_be_raised_with_message(self):
         with pytest.raises(UnsupportedFileTypeError) as exc_info:
             raise UnsupportedFileTypeError("Unsupported file type: .xyz")
-        
+
         assert str(exc_info.value) == "Unsupported file type: .xyz"
 
     def test_can_be_caught_as_markdown_conversion_error(self):
@@ -45,7 +45,7 @@ class TestFileTooLargeError:
     def test_can_be_raised_with_message(self):
         with pytest.raises(FileTooLargeError) as exc_info:
             raise FileTooLargeError("File size exceeds 50MB limit")
-        
+
         assert str(exc_info.value) == "File size exceeds 50MB limit"
 
     def test_can_be_caught_as_markdown_conversion_error(self):
@@ -60,7 +60,7 @@ class TestURLFetchError:
     def test_can_be_raised_with_message(self):
         with pytest.raises(URLFetchError) as exc_info:
             raise URLFetchError("Failed to fetch URL: https://example.com")
-        
+
         assert str(exc_info.value) == "Failed to fetch URL: https://example.com"
 
     def test_can_be_caught_as_markdown_conversion_error(self):
@@ -75,7 +75,7 @@ class TestConversionTimeoutError:
     def test_can_be_raised_with_message(self):
         with pytest.raises(ConversionTimeoutError) as exc_info:
             raise ConversionTimeoutError("Conversion timed out after 30s")
-        
+
         assert str(exc_info.value) == "Conversion timed out after 30s"
 
     def test_can_be_caught_as_markdown_conversion_error(self):
@@ -89,9 +89,9 @@ class TestExceptionInheritance:
             UnsupportedFileTypeError,
             FileTooLargeError,
             URLFetchError,
-            ConversionTimeoutError
+            ConversionTimeoutError,
         ]
-        
+
         for exc_class in custom_exceptions:
             assert issubclass(exc_class, MarkdownConversionError)
             assert issubclass(exc_class, Exception)
@@ -106,14 +106,14 @@ class TestExceptionInheritance:
 
     def test_exception_messages_preserved(self):
         test_message = "Custom error message with details"
-        
+
         exceptions_to_test = [
             MarkdownConversionError(test_message),
             UnsupportedFileTypeError(test_message),
             FileTooLargeError(test_message),
             URLFetchError(test_message),
-            ConversionTimeoutError(test_message)
+            ConversionTimeoutError(test_message),
         ]
-        
+
         for exc in exceptions_to_test:
             assert str(exc) == test_message
