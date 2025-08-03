@@ -188,7 +188,7 @@ class MarkItDownAdapter:
             MarkdownConversionError: If conversion fails
         """
         with self._conversion_context(
-            "content", filename=filename, content_size=len(content)
+            "content", file_name=filename, content_size=len(content)
         ):
             try:
                 return await asyncio.wait_for(
@@ -218,7 +218,7 @@ class MarkItDownAdapter:
             ConversionTimeoutError: If conversion takes longer than timeout
             MarkdownConversionError: If conversion fails
         """
-        with self._conversion_context("stream", filename=filename):
+        with self._conversion_context("stream", file_name=filename):
             try:
                 content = stream.read()
                 stream.seek(0)  # Reset stream position

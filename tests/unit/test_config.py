@@ -34,6 +34,7 @@ class TestSettings:
             "text/plain",
             "text/html",
             "text/markdown",
+            "application/json",
         ]
         assert settings.allowed_file_types == expected_types
 

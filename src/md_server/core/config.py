@@ -11,6 +11,7 @@ class Settings(BaseSettings):
         "text/plain",
         "text/html",
         "text/markdown",
+        "application/json",
     ]
     timeout_seconds: int = 30
 
