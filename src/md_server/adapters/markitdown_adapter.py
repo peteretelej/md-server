@@ -1,7 +1,12 @@
 import asyncio
-from typing import Union, BinaryIO, Optional, List, Tuple
+import logging
+import gc
+import time
+import random
+from typing import Union, BinaryIO, Optional, List, Tuple, Dict, Any
 from pathlib import Path
 from io import BytesIO
+from contextlib import contextmanager
 from ..core.exceptions import MarkdownConversionError, ConversionTimeoutError
 from ..core.markitdown_config import MarkItDownConfig, get_markitdown_config
 
@@ -36,6 +41,94 @@ class MarkItDownAdapter:
         self.timeout_seconds = self.config.timeout_seconds
         self._markitdown_instance = None
         self._custom_converters_registered = False
+        self._requests_session = None
+        self._logger = logging.getLogger(__name__)
+        self._metrics = {
+            'conversions_total': 0,
+            'conversions_successful': 0,
+            'conversions_failed': 0,
+            'total_processing_time': 0.0,
+            'memory_peak_usage': 0
+        }
+    
+    @contextmanager
+    def _conversion_context(self, conversion_type: str, **metadata):
+        """Context manager for conversion operations with metrics and cleanup."""
+        start_time = time.time()
+        self._metrics['conversions_total'] += 1
+        
+        try:
+            self._logger.debug(f"Starting {conversion_type} conversion", extra=metadata)
+            yield
+            
+            processing_time = time.time() - start_time
+            self._metrics['total_processing_time'] += processing_time
+            self._metrics['conversions_successful'] += 1
+            
+            self._logger.info(
+                f"{conversion_type} conversion completed successfully in {processing_time:.2f}s",
+                extra={**metadata, 'processing_time': processing_time}
+            )
+            
+        except Exception as e:
+            self._metrics['conversions_failed'] += 1
+            processing_time = time.time() - start_time
+            
+            self._logger.error(
+                f"{conversion_type} conversion failed after {processing_time:.2f}s: {str(e)}",
+                extra={**metadata, 'processing_time': processing_time, 'error': str(e)}
+            )
+            raise
+        finally:
+            # Force garbage collection to free memory
+            gc.collect()
+    
+    async def _retry_with_backoff(self, func, *args, max_retries: int = None, **kwargs):
+        """Execute function with exponential backoff retry logic."""
+        max_retries = max_retries or self.config.requests_max_retries
+        
+        for attempt in range(max_retries + 1):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                # Check if this is a retryable error
+                if not self._is_retryable_error(e) or attempt == max_retries:
+                    raise
+                
+                # Calculate backoff with jitter
+                backoff_time = (2 ** attempt) + random.uniform(0, 1)
+                
+                self._logger.warning(
+                    f"Conversion attempt {attempt + 1} failed, retrying in {backoff_time:.1f}s: {str(e)}"
+                )
+                
+                await asyncio.sleep(backoff_time)
+        
+        # This should never be reached
+        raise e
+    
+    def _is_retryable_error(self, error: Exception) -> bool:
+        """Determine if an error is retryable."""
+        # Network-related errors that can be retried
+        retryable_exceptions = [
+            'ConnectionError', 'TimeoutError', 'HTTPError', 
+            'ReadTimeoutError', 'ConnectTimeoutError'
+        ]
+        
+        error_type = type(error).__name__
+        error_msg = str(error).lower()
+        
+        # Check for known retryable error types
+        if any(exc in error_type for exc in retryable_exceptions):
+            return True
+        
+        # Check for specific error messages that indicate transient failures
+        retryable_messages = [
+            'connection', 'timeout', 'temporary', 'unavailable',
+            'service temporarily', 'network', 'dns', 'ssl'
+        ]
+        
+        return any(msg in error_msg for msg in retryable_messages)
     
     async def convert_file(self, file_path: Union[str, Path]) -> str:
         """Convert a local file to markdown.
@@ -50,15 +143,16 @@ class MarkItDownAdapter:
             ConversionTimeoutError: If conversion takes longer than timeout
             MarkdownConversionError: If conversion fails
         """
-        try:
-            return await asyncio.wait_for(
-                self._convert_file_sync(file_path),
-                timeout=self.timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
-        except Exception as e:
-            raise MarkdownConversionError(f"Failed to convert file: {str(e)}")
+        with self._conversion_context('file', file_path=str(file_path)):
+            try:
+                return await asyncio.wait_for(
+                    self._convert_file_sync(file_path),
+                    timeout=self.timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
+            except Exception as e:
+                raise MarkdownConversionError(f"Failed to convert file: {str(e)}")
     
     async def convert_content(self, content: bytes, filename: Optional[str] = None) -> str:
         """Convert binary content to markdown using stream-based conversion.
@@ -74,15 +168,16 @@ class MarkItDownAdapter:
             ConversionTimeoutError: If conversion takes longer than timeout
             MarkdownConversionError: If conversion fails
         """
-        try:
-            return await asyncio.wait_for(
-                self._convert_stream_sync(content, filename),
-                timeout=self.timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
-        except Exception as e:
-            raise MarkdownConversionError(f"Failed to convert content: {str(e)}")
+        with self._conversion_context('content', filename=filename, content_size=len(content)):
+            try:
+                return await asyncio.wait_for(
+                    self._convert_stream_sync(content, filename),
+                    timeout=self.timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
+            except Exception as e:
+                raise MarkdownConversionError(f"Failed to convert content: {str(e)}")
     
     async def convert_stream(self, stream: BinaryIO, filename: Optional[str] = None) -> str:
         """Convert binary stream to markdown.
@@ -98,17 +193,18 @@ class MarkItDownAdapter:
             ConversionTimeoutError: If conversion takes longer than timeout
             MarkdownConversionError: If conversion fails
         """
-        try:
-            content = stream.read()
-            stream.seek(0)  # Reset stream position
-            return await asyncio.wait_for(
-                self._convert_stream_sync(content, filename),
-                timeout=self.timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
-        except Exception as e:
-            raise MarkdownConversionError(f"Failed to convert stream: {str(e)}")
+        with self._conversion_context('stream', filename=filename):
+            try:
+                content = stream.read()
+                stream.seek(0)  # Reset stream position
+                return await asyncio.wait_for(
+                    self._convert_stream_sync(content, filename),
+                    timeout=self.timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
+            except Exception as e:
+                raise MarkdownConversionError(f"Failed to convert stream: {str(e)}")
     
     async def convert_url(self, url: str) -> str:
         """Convert a URL to markdown using MarkItDown's native URL support.
@@ -123,15 +219,16 @@ class MarkItDownAdapter:
             ConversionTimeoutError: If conversion takes longer than timeout
             MarkdownConversionError: If conversion fails
         """
-        try:
-            return await asyncio.wait_for(
-                self._convert_url_sync(url),
-                timeout=self.timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
-        except Exception as e:
-            raise MarkdownConversionError(f"Failed to convert URL: {str(e)}")
+        with self._conversion_context('url', url=url):
+            try:
+                return await asyncio.wait_for(
+                    self._retry_with_backoff(self._convert_url_sync, url),
+                    timeout=self.timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                raise ConversionTimeoutError(f"Conversion timed out after {self.timeout_seconds}s")
+            except Exception as e:
+                raise MarkdownConversionError(f"Failed to convert URL: {str(e)}")
     
     async def _convert_file_sync(self, file_path: Union[str, Path]) -> str:
         loop = asyncio.get_event_loop()
@@ -153,12 +250,20 @@ class MarkItDownAdapter:
                 
                 # Create instance with configuration
                 kwargs = self.config.to_markitdown_kwargs()
+                
+                # Use our managed requests session for connection pooling
+                if self._requests_session is None:
+                    self._requests_session = self.config.get_requests_session()
+                kwargs['requests_session'] = self._requests_session
+                
                 self._markitdown_instance = MarkItDown(**kwargs)
                 
                 # Register custom converters
                 if not self._custom_converters_registered:
                     self._register_custom_converters()
                     self._custom_converters_registered = True
+                    
+                self._logger.info("MarkItDown instance initialized with connection pooling")
                     
             except ImportError:
                 raise MarkdownConversionError("markitdown library not installed")
@@ -228,10 +333,19 @@ class MarkItDownAdapter:
                     filename=filename
                 )
             
+            # Track memory usage and optimize for large files
+            content_size = len(content)
+            if content_size > 50 * 1024 * 1024:  # 50MB threshold
+                self._logger.warning(f"Processing large file: {content_size / 1024 / 1024:.1f}MB")
+            
             # Use BytesIO for direct stream conversion without temporary files
             with BytesIO(content) as stream:
                 result = md.convert_stream(stream, stream_info=stream_info)
-                return result.markdown
+                markdown_result = result.markdown
+                
+                # Clear content reference to free memory early
+                del content
+                return markdown_result
                     
         except ImportError:
             raise MarkdownConversionError("markitdown library not installed")
@@ -379,3 +493,42 @@ class MarkItDownAdapter:
             "custom_converters_count": len(self.config.custom_converters),
             "supported_formats": self.get_supported_formats()
         }
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get conversion metrics for monitoring."""
+        return dict(self._metrics)
+    
+    def reset_metrics(self) -> None:
+        """Reset conversion metrics."""
+        self._metrics = {
+            'conversions_total': 0,
+            'conversions_successful': 0,
+            'conversions_failed': 0,
+            'total_processing_time': 0.0,
+            'memory_peak_usage': 0
+        }
+    
+    async def close(self) -> None:
+        """Close and cleanup resources properly."""
+        try:
+            if self._requests_session:
+                self._requests_session.close()
+                self._requests_session = None
+            
+            if self._markitdown_instance:
+                self._markitdown_instance = None
+                
+            # Force garbage collection
+            gc.collect()
+            
+            self._logger.info("MarkItDown adapter resources cleaned up")
+        except Exception as e:
+            self._logger.error(f"Error during cleanup: {str(e)}")
+    
+    def __del__(self):
+        """Destructor to ensure cleanup."""
+        try:
+            if hasattr(self, '_requests_session') and self._requests_session:
+                self._requests_session.close()
+        except Exception:
+            pass
