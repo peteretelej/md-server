@@ -6,11 +6,12 @@ from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_413_REQUEST_ENTITY_TOO_LARGE, HTTP_415_UNSUPPORTED_MEDIA_TYPE, HTTP_408_REQUEST_TIMEOUT, HTTP_500_INTERNAL_SERVER_ERROR
 from litestar.enums import RequestEncodingType
 from litestar.params import Body
+from markitdown import MarkItDown
 import asyncio
 
 from .models import URLConvertRequest, MarkdownResponse
 from .converter import convert_content, convert_url
-from .core.config import get_settings
+from .core.config import Settings
 
 
 class ConvertController(Controller):
@@ -19,11 +20,11 @@ class ConvertController(Controller):
     @post("")
     async def convert_file(
         self, 
-        data: Annotated[Dict[str, UploadFile], Body(media_type=RequestEncodingType.MULTI_PART)]
+        data: Annotated[Dict[str, UploadFile], Body(media_type=RequestEncodingType.MULTI_PART)],
+        converter: MarkItDown,
+        settings: Settings,
     ) -> Response[MarkdownResponse]:
         """Convert uploaded file to markdown"""
-        settings = get_settings()
-        
         if 'file' not in data:
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST,
@@ -42,7 +43,7 @@ class ConvertController(Controller):
                 )
             
             markdown = await asyncio.wait_for(
-                convert_content(content, file.filename),
+                convert_content(converter, content, file.filename),
                 timeout=settings.timeout_seconds
             )
             
@@ -64,13 +65,16 @@ class ConvertController(Controller):
                 raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Conversion failed: {error_msg}")
 
     @post("/url")
-    async def convert_url_endpoint(self, data: URLConvertRequest) -> Response[MarkdownResponse]:
+    async def convert_url_endpoint(
+        self, 
+        data: URLConvertRequest,
+        converter: MarkItDown,
+        settings: Settings,
+    ) -> Response[MarkdownResponse]:
         """Convert URL content to markdown"""
-        settings = get_settings()
-        
         try:
             markdown = await asyncio.wait_for(
-                convert_url(data.url),
+                convert_url(converter, data.url),
                 timeout=settings.timeout_seconds
             )
             
