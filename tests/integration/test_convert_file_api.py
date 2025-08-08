@@ -131,7 +131,7 @@ class TestConvertFileAPI:
         ) as client:
             response = await client.post("/convert")
 
-            assert response.status_code == 422
+            assert response.status_code == 400
             data = response.json()
             assert "detail" in data
 
