@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from md_server.main import app
+from md_server.app import app
 
 
 @pytest.mark.integration
@@ -13,7 +13,7 @@ class TestHealthAPI:
             response = await client.get("/healthz")
 
             assert response.status_code == 200
-            assert response.json() == {"status": "ok"}
+            assert response.json() == {"status": "healthy"}
 
     @pytest.mark.asyncio
     async def test_health_check_response_format(self):
@@ -25,7 +25,7 @@ class TestHealthAPI:
             data = response.json()
             assert isinstance(data, dict)
             assert "status" in data
-            assert data["status"] == "ok"
+            assert data["status"] == "healthy"
             assert len(data) == 1
 
     @pytest.mark.asyncio
@@ -45,7 +45,7 @@ class TestHealthAPI:
             response = await client.get("/healthz")
 
             assert response.status_code == 200
-            assert response.json()["status"] == "ok"
+            assert response.json()["status"] == "healthy"
 
     @pytest.mark.asyncio
     async def test_health_check_multiple_requests(self):
@@ -55,7 +55,7 @@ class TestHealthAPI:
             for _ in range(5):
                 response = await client.get("/healthz")
                 assert response.status_code == 200
-                assert response.json() == {"status": "ok"}
+                assert response.json() == {"status": "healthy"}
 
     @pytest.mark.asyncio
     async def test_health_check_method_not_allowed(self):
@@ -72,4 +72,4 @@ class TestHealthAPI:
         ) as client:
             response = await client.get("/healthz?test=1")
             assert response.status_code == 200
-            assert response.json() == {"status": "ok"}
+            assert response.json() == {"status": "healthy"}

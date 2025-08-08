@@ -13,7 +13,9 @@ docker stop $CONTAINER_NAME 2>/dev/null || true
 docker rm $CONTAINER_NAME 2>/dev/null || true
 
 echo "Starting $IMAGE_NAME on port $PORT..."
-docker run -d --name $CONTAINER_NAME -p $PORT:8080 $IMAGE_NAME
+docker run -d --name $CONTAINER_NAME \
+    --restart always \
+    -p "127.0.0.1${PORT}:8080" $IMAGE_NAME
 
 echo "✓ Server running at http://localhost:$PORT"
 echo "  View logs: docker logs -f $CONTAINER_NAME"

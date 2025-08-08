@@ -1,6 +1,6 @@
 import argparse
 import uvicorn
-from .main import app
+from .app import app
 
 
 def main():
