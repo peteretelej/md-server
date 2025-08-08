@@ -1,10 +1,8 @@
 import pytest
 from pathlib import Path
-from httpx import AsyncClient
-from litestar.testing import TestClient
+from litestar.testing import AsyncTestClient, TestClient
 
 from md_server.core.config import Settings
-from md_server.core.markitdown_config import MarkItDownConfig
 
 
 def test_test_data_dir_fixture(test_data_dir):
@@ -20,7 +18,7 @@ def test_client_fixture(client):
 
 @pytest.mark.asyncio
 async def test_async_client_fixture(async_client):
-    assert isinstance(async_client, AsyncClient)
+    assert isinstance(async_client, AsyncTestClient)
 
 
 def test_file_test_vectors_fixture(file_test_vectors):
@@ -55,9 +53,9 @@ def test_mock_settings_fixture(mock_settings):
 
 
 def test_mock_markitdown_config_fixture(mock_markitdown_config):
-    assert isinstance(mock_markitdown_config, MarkItDownConfig)
-    assert mock_markitdown_config.enable_builtins is True
-    assert mock_markitdown_config.enable_plugins is False
+    assert isinstance(mock_markitdown_config, dict)
+    assert mock_markitdown_config["enable_builtins"] is True
+    assert mock_markitdown_config["enable_plugins"] is False
 
 
 def test_mock_converter_fixture(mock_converter):

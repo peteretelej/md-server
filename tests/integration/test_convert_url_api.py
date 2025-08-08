@@ -1,7 +1,8 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
+from litestar.testing import AsyncTestClient
 from unittest.mock import patch
-from md_server.main import app
+import asyncio
+from md_server.app import app
 
 
 @pytest.mark.integration
@@ -9,13 +10,11 @@ class TestConvertURLAPI:
     @pytest.mark.asyncio
     async def test_convert_valid_url(self):
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
             mock_convert.return_value = "# Test Content\n\nThis is converted from URL."
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://example.com/article"}
                 )
@@ -30,13 +29,11 @@ class TestConvertURLAPI:
     @pytest.mark.asyncio
     async def test_convert_url_response_format(self):
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
             mock_convert.return_value = "Sample markdown content"
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://example.com"}
                 )
@@ -50,40 +47,32 @@ class TestConvertURLAPI:
 
     @pytest.mark.asyncio
     async def test_convert_invalid_url_format(self):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncTestClient(app=app) as client:
             response = await client.post(
                 "/convert/url", json={"url": "not-a-valid-url"}
             )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
             data = response.json()
             assert "detail" in data
 
     @pytest.mark.asyncio
     async def test_convert_missing_url(self):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncTestClient(app=app) as client:
             response = await client.post("/convert/url", json={})
 
-            assert response.status_code == 422
+            assert response.status_code == 400
             data = response.json()
             assert "detail" in data
 
     @pytest.mark.asyncio
     async def test_convert_url_with_timeout_error(self):
-        from md_server.core.exceptions import ConversionTimeoutError
-
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
-        ) as mock_convert:
-            mock_convert.side_effect = ConversionTimeoutError("Request timed out")
+            "asyncio.wait_for"
+        ) as mock_wait_for:
+            mock_wait_for.side_effect = asyncio.TimeoutError()
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://example.com/slow-page"}
                 )
@@ -95,16 +84,12 @@ class TestConvertURLAPI:
 
     @pytest.mark.asyncio
     async def test_convert_url_with_fetch_error(self):
-        from md_server.core.exceptions import URLFetchError
-
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
-            mock_convert.side_effect = URLFetchError("Failed to fetch URL")
+            mock_convert.side_effect = Exception("Failed to fetch URL")
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://nonexistent.example.com"}
                 )
@@ -117,13 +102,11 @@ class TestConvertURLAPI:
     @pytest.mark.asyncio
     async def test_convert_url_with_generic_error(self):
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
             mock_convert.side_effect = Exception("Generic conversion error")
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://example.com"}
                 )
@@ -131,18 +114,16 @@ class TestConvertURLAPI:
                 assert response.status_code == 500
                 data = response.json()
                 assert "detail" in data
-                assert "Conversion failed" in data["detail"]
+                assert "Internal Server Error" in data["detail"]
 
     @pytest.mark.asyncio
     async def test_convert_url_content_validation(self):
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
             mock_convert.return_value = "# Example Article\n\nThis is the content from the webpage.\n\n## Section 1\n\nMore details here."
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://example.com/article"}
                 )
@@ -163,13 +144,11 @@ class TestConvertURLAPI:
         ]
 
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
             mock_convert.return_value = "# URL Content"
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 for url in test_urls:
                     response = await client.post("/convert/url", json={"url": url})
                     assert response.status_code == 200
@@ -179,13 +158,11 @@ class TestConvertURLAPI:
     @pytest.mark.asyncio
     async def test_convert_url_sanitization(self):
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
             mock_convert.return_value = "# Sanitized Content"
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://example.com/path with spaces"}
                 )
@@ -197,13 +174,11 @@ class TestConvertURLAPI:
     @pytest.mark.asyncio
     async def test_convert_url_empty_response(self):
         with patch(
-            "md_server.converters.url_converter.URLConverter.convert"
+            "md_server.converter._sync_convert_url"
         ) as mock_convert:
             mock_convert.return_value = ""
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
+            async with AsyncTestClient(app=app) as client:
                 response = await client.post(
                     "/convert/url", json={"url": "https://example.com/empty"}
                 )
@@ -215,13 +190,11 @@ class TestConvertURLAPI:
 
     @pytest.mark.asyncio
     async def test_convert_url_wrong_content_type(self):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncTestClient(app=app) as client:
             response = await client.post(
                 "/convert/url",
                 data="url=https://example.com",
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
-            assert response.status_code == 422
+            assert response.status_code == 400

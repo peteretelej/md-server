@@ -4,12 +4,10 @@ from typing import Dict, List
 from unittest.mock import Mock
 
 import pytest
-from httpx import AsyncClient, ASGITransport
-from litestar.testing import TestClient
+from litestar.testing import AsyncTestClient
 
 from md_server.app import app
 from md_server.core.config import Settings
-from md_server.core.markitdown_config import MarkItDownConfig
 
 
 @dataclass
@@ -34,17 +32,16 @@ def test_data_dir() -> Path:
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client():
     """Litestar test client."""
+    from litestar.testing import TestClient
     return TestClient(app)
 
 
 @pytest.fixture
-async def async_client() -> AsyncClient:
-    """Async HTTP client for testing."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+async def async_client():
+    """Async test client for testing."""
+    async with AsyncTestClient(app=app) as ac:
         yield ac
 
 
@@ -159,11 +156,13 @@ def mock_settings() -> Settings:
 
 
 @pytest.fixture
-def mock_markitdown_config() -> MarkItDownConfig:
+def mock_markitdown_config() -> dict:
     """Mock MarkItDown configuration for testing."""
-    return MarkItDownConfig(
-        enable_builtins=True, enable_plugins=False, timeout_seconds=30
-    )
+    return {
+        "enable_builtins": True,
+        "enable_plugins": False,
+        "timeout_seconds": 30
+    }
 
 
 @pytest.fixture
