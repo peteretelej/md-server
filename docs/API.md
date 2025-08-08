@@ -7,11 +7,13 @@ Optional API key authentication may be required (configured per deployment).
 ## Endpoints
 
 ### Health Check
+
 ```http
 GET /healthz
 ```
 
 Response:
+
 ```json
 {
   "status": "ok"
@@ -19,6 +21,7 @@ Response:
 ```
 
 ### Convert File
+
 ```http
 POST /convert
 Content-Type: multipart/form-data
@@ -27,6 +30,7 @@ file: (binary file)
 ```
 
 Response:
+
 ```json
 {
   "markdown": "# Document Title\n\nContent here..."
@@ -34,6 +38,7 @@ Response:
 ```
 
 ### Convert URL
+
 ```http
 POST /convert/url
 Content-Type: application/json
@@ -44,6 +49,7 @@ Content-Type: application/json
 ```
 
 Response:
+
 ```json
 {
   "markdown": "# Document Title\n\nContent here..."
@@ -51,6 +57,7 @@ Response:
 ```
 
 ## Error Response
+
 ```json
 {
   "error": "Error description"
@@ -58,6 +65,7 @@ Response:
 ```
 
 ## HTTP Status Codes
+
 - 200 OK - Success
 - 400 Bad Request - Invalid input
 - 415 Unsupported Media Type - File format not supported
@@ -66,11 +74,13 @@ Response:
 ## Examples
 
 ### Convert Local File
+
 ```bash
 curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
 ```
 
 ### Convert URL
+
 ```bash
 curl -X POST http://localhost:8080/convert/url \
   -H "Content-Type: application/json" \
@@ -78,6 +88,7 @@ curl -X POST http://localhost:8080/convert/url \
 ```
 
 ### Health Check
+
 ```bash
 curl http://localhost:8080/healthz
 ```
