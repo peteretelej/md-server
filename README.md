@@ -55,7 +55,7 @@ Health check response:
 ```bash
 $ curl http://localhost:8080/healthz
 {
-  "status": "ok"
+  "status": "healthy"
 }
 ```
 
@@ -83,7 +83,7 @@ uv run md-server
 # Run on custom port
 uv run md-server --port 9000
 
-# Run tests (when available)
+# Run tests
 uv run pytest
 
 # Add new dependencies

@@ -16,7 +16,7 @@ Response:
 
 ```json
 {
-  "status": "ok"
+  "status": "healthy"
 }
 ```
 
@@ -60,7 +60,7 @@ Response:
 
 ```json
 {
-  "error": "Error description"
+  "detail": "Error description"
 }
 ```
 
