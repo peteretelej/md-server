@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from pathlib import Path
-from md_server.main import app
+from md_server.app import app
 
 
 test_data_dir = Path(__file__).parent.parent / "test_data"

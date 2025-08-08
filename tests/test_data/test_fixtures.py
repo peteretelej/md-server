@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from httpx import AsyncClient
-from fastapi.testclient import TestClient
+from litestar.testing import TestClient
 
 from md_server.core.config import Settings
 from md_server.core.markitdown_config import MarkItDownConfig

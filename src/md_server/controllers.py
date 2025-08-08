@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Annotated, Dict
 from litestar import Controller, post
 from litestar.datastructures import UploadFile
@@ -7,16 +6,11 @@ from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_413_REQUEST_ENTITY_TOO_LARGE, HTTP_415_UNSUPPORTED_MEDIA_TYPE, HTTP_408_REQUEST_TIMEOUT, HTTP_500_INTERNAL_SERVER_ERROR
 from litestar.enums import RequestEncodingType
 from litestar.params import Body
+import asyncio
 
 from .models import URLConvertRequest, MarkdownResponse
-from .adapters.markitdown_adapter import MarkItDownAdapter
+from .converter import convert_content, convert_url
 from .core.config import get_settings
-from .core.exceptions import (
-    UnsupportedFileTypeError,
-    FileTooLargeError,
-    URLFetchError,
-    ConversionTimeoutError,
-)
 
 
 class ConvertController(Controller):
@@ -29,9 +23,7 @@ class ConvertController(Controller):
     ) -> Response[MarkdownResponse]:
         """Convert uploaded file to markdown"""
         settings = get_settings()
-        adapter = MarkItDownAdapter(timeout_seconds=settings.timeout_seconds)
         
-        # Get the file from the dictionary (expecting 'file' key)
         if 'file' not in data:
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST,
@@ -41,51 +33,60 @@ class ConvertController(Controller):
         file = data['file']
         
         try:
-            # Read file content first
             content = await file.read()
             
-            # Validate file size
             if len(content) > settings.max_file_size:
                 raise HTTPException(
                     status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail=f"File size {len(content)} exceeds limit {settings.max_file_size}"
                 )
             
-            # Convert using adapter
-            markdown = await adapter.convert_content(content, file.filename)
+            markdown = await asyncio.wait_for(
+                convert_content(content, file.filename),
+                timeout=settings.timeout_seconds
+            )
             
             return Response(
                 MarkdownResponse(markdown=markdown),
                 status_code=HTTP_200_OK
             )
             
-        except UnsupportedFileTypeError as e:
-            raise HTTPException(status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(e))
-        except FileTooLargeError as e:
-            raise HTTPException(status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
-        except ConversionTimeoutError as e:
-            raise HTTPException(status_code=HTTP_408_REQUEST_TIMEOUT, detail=str(e))
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=HTTP_408_REQUEST_TIMEOUT, 
+                detail=f"Conversion timed out after {settings.timeout_seconds}s"
+            )
         except Exception as e:
-            raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Conversion failed: {str(e)}")
+            error_msg = str(e)
+            if "unsupported" in error_msg.lower():
+                raise HTTPException(status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=error_msg)
+            else:
+                raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Conversion failed: {error_msg}")
 
     @post("/url")
-    async def convert_url(self, data: URLConvertRequest) -> Response[MarkdownResponse]:
+    async def convert_url_endpoint(self, data: URLConvertRequest) -> Response[MarkdownResponse]:
         """Convert URL content to markdown"""
         settings = get_settings()
-        adapter = MarkItDownAdapter(timeout_seconds=settings.timeout_seconds)
         
         try:
-            # Convert using adapter
-            markdown = await adapter.convert_url(data.url)
+            markdown = await asyncio.wait_for(
+                convert_url(data.url),
+                timeout=settings.timeout_seconds
+            )
             
             return Response(
                 MarkdownResponse(markdown=markdown),
                 status_code=HTTP_200_OK
             )
             
-        except URLFetchError as e:
-            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e))
-        except ConversionTimeoutError as e:
-            raise HTTPException(status_code=HTTP_408_REQUEST_TIMEOUT, detail=str(e))
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=HTTP_408_REQUEST_TIMEOUT, 
+                detail=f"URL conversion timed out after {settings.timeout_seconds}s"
+            )
         except Exception as e:
-            raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Conversion failed: {str(e)}")
+            error_msg = str(e)
+            if any(word in error_msg.lower() for word in ["url", "fetch", "network", "connection"]):
+                raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=error_msg)
+            else:
+                raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Conversion failed: {error_msg}")

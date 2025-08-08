@@ -4,10 +4,10 @@ from typing import Dict, List
 from unittest.mock import Mock
 
 import pytest
-from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
+from litestar.testing import TestClient
 
-from md_server.main import app
+from md_server.app import app
 from md_server.core.config import Settings
 from md_server.core.markitdown_config import MarkItDownConfig
 
@@ -35,7 +35,7 @@ def test_data_dir() -> Path:
 
 @pytest.fixture
 def client() -> TestClient:
-    """FastAPI test client."""
+    """Litestar test client."""
     return TestClient(app)
 
 
