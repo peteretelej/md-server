@@ -100,7 +100,7 @@ uv add --dev package-name
 
 ```bash
 docker build -t md-server .
-docker run -p 8080:8080 --env-file .env md-server
+docker run -p 8080:8080 --env-file .env ghcr.io/peteretelej/md-server
 ```
 
 ## Publishing New Version

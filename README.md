@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/md-server.svg)](https://pypi.org/project/md-server/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/peteretelej/md-server/pkgs/container/md-server)
 
 HTTP API server for converting documents (PDF, Office document types), audio, web pages, Youtube videos and more to markdown.
 
@@ -45,7 +45,7 @@ curl http://localhost:8080/healthz
 # Run Docker image
 docker run -d -p 127.0.0.1:8080:8080 --name md-server \
   --restart unless-stopped \
-  etelej/md-server
+  ghcr.io/peteretelej/md-server
 
 # Convert file
 curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
@@ -126,3 +126,7 @@ docker run -p 127.0.0.1:8080:8080 \
 This project makes use of these excellent tools:
 
 [![Powered by Crawl4AI](https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/assets/powered-by-light.svg)](https://github.com/unclecode/crawl4ai) [![microsoft/markitdown](https://img.shields.io/badge/microsoft-MarkItDown-0078D4?style=for-the-badge&logo=microsoft)](https://github.com/microsoft/markitdown)
+
+## License
+
+[MIT](./LICENSE)
