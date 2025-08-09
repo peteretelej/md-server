@@ -16,3 +16,5 @@ tests/
 scripts/
 .env
 .env.*
+_docs/
+docs/

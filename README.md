@@ -39,6 +39,18 @@ curl -X POST http://localhost:8080/convert/url \
 curl http://localhost:8080/healthz
 ```
 
+### Using Docker
+
+```bash
+# Run Docker image
+docker run -d -p 8080:8080 --name md-server \
+  --restart unless-stopped \
+  etelej/md-server
+
+# Convert file
+curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
+```
+
 ## Example Output
 
 Convert a file to markdown:
@@ -93,27 +105,24 @@ uv add package-name
 uv add --dev pytest ruff mypy
 ```
 
-### Docker
+### Building Docker Image
 
 ```bash
-# Build and run (default port 8080)
-./scripts/docker.sh
-
-# Custom port
-./scripts/docker.sh 9000
-
-# Manual Docker commands
+# Build manually
 docker build -t md-server .
-docker run -p 8080:8080 md-server
+
+# You can add env variables to a .env and use it
+
+# Launch it locally
+docker run -p 127.0.0.1:8080:8080 \
+  --restart unless-stopped \
+  --name md-server \
+  --env-file .env \
+  md-server
 ```
 
 ## Powered By
 
 This project makes use of these excellent tools:
 
-<a href="https://github.com/unclecode/crawl4ai">
-  <img src="https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/assets/powered-by-light.svg" alt="Powered by Crawl4AI" width="200"/>
-</a>
-<a href="https://github.com/microsoft/markitdown">
-  <img src="https://img.shields.io/badge/microsoft-MarkItDown-0078D4?style=for-the-badge&logo=microsoft" alt="microsoft/markitdown"/>
-</a>
+[![Powered by Crawl4AI](https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/assets/powered-by-light.svg)](https://github.com/unclecode/crawl4ai) [![microsoft/markitdown](https://img.shields.io/badge/microsoft-MarkItDown-0078D4?style=for-the-badge&logo=microsoft)](https://github.com/microsoft/markitdown)
