@@ -71,11 +71,10 @@ class ConvertController(Controller):
                 raise HTTPException(
                     status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=error_msg
                 )
-            else:
-                raise HTTPException(
-                    status_code=HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Conversion failed: {error_msg}",
-                )
+            raise HTTPException(
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Conversion failed: {error_msg}",
+            )
 
     @post("/url")
     async def convert_url_endpoint(
@@ -87,8 +86,8 @@ class ConvertController(Controller):
         """Convert URL content to markdown"""
         try:
             markdown = await asyncio.wait_for(
-                url_converter.convert_url(data.url, data.js_rendering), 
-                timeout=settings.timeout_seconds
+                url_converter.convert_url(data.url, data.js_rendering),
+                timeout=settings.timeout_seconds,
             )
 
             return Response(
@@ -100,15 +99,10 @@ class ConvertController(Controller):
                 status_code=HTTP_408_REQUEST_TIMEOUT,
                 detail=f"URL conversion timed out after {settings.timeout_seconds}s",
             )
+        except ValueError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e))
         except Exception as e:
-            error_msg = str(e)
-            if any(
-                word in error_msg.lower()
-                for word in ["url", "fetch", "network", "connection", "invalid url", "only http/https"]
-            ):
-                raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=error_msg)
-            else:
-                raise HTTPException(
-                    status_code=HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Conversion failed: {error_msg}",
-                )
+            raise HTTPException(
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Conversion failed: {str(e)}",
+            )

@@ -7,7 +7,7 @@ class TestSettings:
     def test_default_values(self):
         """Test that default values are set correctly."""
         settings = Settings()
-        
+
         assert settings.host == "127.0.0.1"
         assert settings.port == 8080
         assert settings.api_key is None
@@ -21,18 +21,21 @@ class TestSettings:
 
     def test_env_prefix(self):
         """Test that MD_SERVER_ prefix is used for environment variables."""
-        with patch.dict(os.environ, {
-            "MD_SERVER_HOST": "0.0.0.0",
-            "MD_SERVER_PORT": "9000",
-            "MD_SERVER_API_KEY": "test-api-key",
-            "MD_SERVER_MAX_FILE_SIZE": "10485760",
-            "MD_SERVER_TIMEOUT_SECONDS": "60",
-            "MD_SERVER_DEBUG": "true",
-            "MD_SERVER_HTTP_PROXY": "http://proxy.example.com:8080",
-            "MD_SERVER_HTTPS_PROXY": "https://proxy.example.com:8080"
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "MD_SERVER_HOST": "0.0.0.0",
+                "MD_SERVER_PORT": "9000",
+                "MD_SERVER_API_KEY": "test-api-key",
+                "MD_SERVER_MAX_FILE_SIZE": "10485760",
+                "MD_SERVER_TIMEOUT_SECONDS": "60",
+                "MD_SERVER_DEBUG": "true",
+                "MD_SERVER_HTTP_PROXY": "http://proxy.example.com:8080",
+                "MD_SERVER_HTTPS_PROXY": "https://proxy.example.com:8080",
+            },
+        ):
             settings = Settings()
-            
+
             assert settings.host == "0.0.0.0"
             assert settings.port == 9000
             assert settings.api_key == "test-api-key"
@@ -47,7 +50,7 @@ class TestSettings:
         with patch.dict(os.environ, {"MD_SERVER_DEBUG": "true"}):
             settings = Settings()
             assert settings.debug is True
-            
+
         with patch.dict(os.environ, {"MD_SERVER_DEBUG": "false"}):
             settings = Settings()
             assert settings.debug is False
@@ -56,7 +59,7 @@ class TestSettings:
         """Test that API key is optional and can be None."""
         settings = Settings()
         assert settings.api_key is None
-        
+
         with patch.dict(os.environ, {"MD_SERVER_API_KEY": "secret-key"}):
             settings = Settings()
             assert settings.api_key == "secret-key"
@@ -66,11 +69,14 @@ class TestSettings:
         settings = Settings()
         assert settings.http_proxy is None
         assert settings.https_proxy is None
-        
-        with patch.dict(os.environ, {
-            "MD_SERVER_HTTP_PROXY": "http://proxy:8080",
-            "MD_SERVER_HTTPS_PROXY": "https://proxy:8080"
-        }):
+
+        with patch.dict(
+            os.environ,
+            {
+                "MD_SERVER_HTTP_PROXY": "http://proxy:8080",
+                "MD_SERVER_HTTPS_PROXY": "https://proxy:8080",
+            },
+        ):
             settings = Settings()
             assert settings.http_proxy == "http://proxy:8080"
             assert settings.https_proxy == "https://proxy:8080"
@@ -93,7 +99,7 @@ class TestSettings:
             ("FALSE", False),
             ("0", False),
         ]
-        
+
         for env_value, expected in test_cases:
             with patch.dict(os.environ, {"MD_SERVER_DEBUG": env_value}):
                 settings = Settings()
@@ -101,11 +107,14 @@ class TestSettings:
 
     def test_integer_conversion(self):
         """Test integer environment variable conversion."""
-        with patch.dict(os.environ, {
-            "MD_SERVER_PORT": "9999",
-            "MD_SERVER_MAX_FILE_SIZE": "1048576",
-            "MD_SERVER_TIMEOUT_SECONDS": "45"
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "MD_SERVER_PORT": "9999",
+                "MD_SERVER_MAX_FILE_SIZE": "1048576",
+                "MD_SERVER_TIMEOUT_SECONDS": "45",
+            },
+        ):
             settings = Settings()
             assert settings.port == 9999
             assert settings.max_file_size == 1048576

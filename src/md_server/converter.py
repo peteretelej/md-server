@@ -11,11 +11,6 @@ from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig
 from .core.config import Settings
 
 
-class ConversionError(Exception):
-    """Exception raised when conversion fails"""
-    pass
-
-
 def validate_url(url: str) -> str:
     """Validate and sanitize URL input"""
     parsed = urlparse(url)
@@ -28,43 +23,45 @@ def validate_url(url: str) -> str:
 
 class UrlConverter:
     """Crawl4AI-based URL to markdown converter with proper resource management"""
-    
+
     def __init__(self, settings: Settings):
         self.settings = settings
-    
+
     async def convert_url(self, url: str, enable_js: Optional[bool] = None) -> str:
         """Convert URL to markdown with proper resource cleanup"""
         validate_url(url)
-        
-        enable_js = enable_js if enable_js is not None else self.settings.crawl4ai_js_rendering
-        
+
+        enable_js = (
+            enable_js if enable_js is not None else self.settings.crawl4ai_js_rendering
+        )
+
         browser_config = BrowserConfig(
             browser_type="chromium",
             headless=True,
             proxy=self.settings.http_proxy,
             user_agent=self.settings.crawl4ai_user_agent,
-            verbose=self.settings.debug
+            verbose=self.settings.debug,
         )
-        
+
         run_config = CrawlerRunConfig(
             page_timeout=self.settings.crawl4ai_timeout * 1000,
             cache_mode="bypass",
             remove_overlay_elements=True,
-            word_count_threshold=10
+            word_count_threshold=10,
         )
-        
+
         try:
             async with AsyncWebCrawler(config=browser_config) as crawler:
                 result = await crawler.arun(url, config=run_config)
-                
+
                 if not result.success:
-                    raise ConversionError(f"Failed to crawl {url}: {result.error_message}")
-                
+                    raise ValueError(f"Failed to crawl {url}: {result.error_message}")
+
                 return result.markdown or ""
-                
+
         except Exception as e:
             logging.error(f"Crawl4AI conversion failed for {url}: {e}")
-            raise ConversionError(f"Failed to convert URL: {str(e)}")
+            raise ValueError(f"Failed to convert URL: {str(e)}")
 
 
 async def convert_content(

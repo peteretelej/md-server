@@ -20,19 +20,19 @@ async def healthz() -> Response:
 def create_requests_session(settings: Settings) -> requests.Session:
     """Create requests session with proxy configuration"""
     session = requests.Session()
-    
+
     proxies = {}
     if settings.http_proxy:
-        proxies['http'] = settings.http_proxy
-        os.environ['HTTP_PROXY'] = settings.http_proxy
-        
+        proxies["http"] = settings.http_proxy
+        os.environ["HTTP_PROXY"] = settings.http_proxy
+
     if settings.https_proxy:
-        proxies['https'] = settings.https_proxy
-        os.environ['HTTPS_PROXY'] = settings.https_proxy
-        
+        proxies["https"] = settings.https_proxy
+        os.environ["HTTPS_PROXY"] = settings.https_proxy
+
     if proxies:
         session.proxies.update(proxies)
-        
+
     return session
 
 
