@@ -3,10 +3,12 @@
 ## Development Setup
 
 ### Prerequisites
+
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) package manager
 
 ### Setup
+
 ```bash
 git clone https://github.com/peteretelej/md-server.git
 cd md-server
@@ -55,17 +57,29 @@ uv run ruff format
 
 # Pre-commit checks
 uv run ruff check && uv run ruff format --check && uv run pytest
+
+# Use pre-push script
+./scripts/pre-push
 ```
 
 ## Development Workflow
 
 1. Create feature branch: `git checkout -b feature/name`
 2. Make changes, add tests
-3. Run quality checks: `uv run pytest && uv run ruff check`
+3. Run quality checks: `./scripts/pre-push`
 4. Commit and push
 5. Create pull request
 
+### Git Hooks
+
+Install the pre-push hook to run checks automatically:
+
+```bash
+ln -sf ./scripts/pre-push .git/hooks/pre-push
+```
+
 ### Coding Standards
+
 - Use type hints
 - Follow FastAPI patterns
 - Use Pydantic models for validation
@@ -103,7 +117,9 @@ docker run -p 8080:8080 --env-file .env md-server
 CI/CD handles PyPI publishing, GitHub releases, and Docker images automatically.
 
 ### Versioning
+
 Follow [Semantic Versioning](https://semver.org/):
+
 - **MAJOR**: Breaking changes
 - **MINOR**: New features
 - **PATCH**: Bug fixes

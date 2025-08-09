@@ -71,6 +71,10 @@ markers = [
     "integration: Integration tests", 
     "slow: Slow tests"
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic._internal._config",
+    "ignore::pytest.PytestCollectionWarning",
+]
 
 [tool.coverage.run]
 omit = ["tests/*", "src/md_server/__main__.py"]

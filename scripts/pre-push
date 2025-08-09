@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+echo "Running pre-push checks..."
+
+echo "🔍 Running ruff check..."
+uv run ruff check
+
+echo "📝 Running ruff format check..."
+uv run ruff format --check
+
+echo "🧪 Running tests..."
+uv run pytest
+
+echo "✅ All pre-push checks passed!"
