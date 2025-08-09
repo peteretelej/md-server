@@ -17,7 +17,7 @@ from markitdown import MarkItDown
 import asyncio
 
 from .models import URLConvertRequest, MarkdownResponse
-from .converter import convert_content, convert_url
+from .converter import convert_content, UrlConverter
 from .core.config import Settings
 
 
@@ -81,13 +81,14 @@ class ConvertController(Controller):
     async def convert_url_endpoint(
         self,
         data: URLConvertRequest,
-        converter: MarkItDown,
+        url_converter: UrlConverter,
         settings: Settings,
     ) -> Response[MarkdownResponse]:
         """Convert URL content to markdown"""
         try:
             markdown = await asyncio.wait_for(
-                convert_url(converter, data.url), timeout=settings.timeout_seconds
+                url_converter.convert_url(data.url, data.js_rendering), 
+                timeout=settings.timeout_seconds
             )
 
             return Response(
@@ -103,7 +104,7 @@ class ConvertController(Controller):
             error_msg = str(e)
             if any(
                 word in error_msg.lower()
-                for word in ["url", "fetch", "network", "connection"]
+                for word in ["url", "fetch", "network", "connection", "invalid url", "only http/https"]
             ):
                 raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=error_msg)
             else:

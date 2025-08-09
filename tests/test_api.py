@@ -57,7 +57,7 @@ class TestAPI:
 
     @pytest.mark.asyncio
     async def test_convert_url_success(self):
-        with patch("md_server.converter._sync_convert_url") as mock_convert:
+        with patch("md_server.converter.UrlConverter.convert_url") as mock_convert:
             mock_convert.return_value = "# Test Content"
             
             async with AsyncTestClient(app=app) as client:

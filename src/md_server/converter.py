@@ -36,9 +36,6 @@ class UrlConverter:
         """Convert URL to markdown with proper resource cleanup"""
         validate_url(url)
         
-        if not self.settings.crawl4ai_enabled:
-            return await self._fallback_convert_url(url)
-        
         enable_js = enable_js if enable_js is not None else self.settings.crawl4ai_js_rendering
         
         browser_config = BrowserConfig(
@@ -61,24 +58,12 @@ class UrlConverter:
                 result = await crawler.arun(url, config=run_config)
                 
                 if not result.success:
-                    logging.warning(f"Crawl4AI failed for {url}: {result.error_message}, falling back to MarkItDown")
-                    return await self._fallback_convert_url(url)
+                    raise ConversionError(f"Failed to crawl {url}: {result.error_message}")
                 
                 return result.markdown or ""
                 
         except Exception as e:
-            logging.warning(f"Crawl4AI conversion failed for {url}: {e}, falling back to MarkItDown")
-            return await self._fallback_convert_url(url)
-    
-    async def _fallback_convert_url(self, url: str) -> str:
-        """Fallback to MarkItDown for URL conversion"""
-        try:
-            converter = MarkItDown()
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, converter.convert, url)
-            return result.markdown
-        except Exception as e:
-            logging.error(f"Both Crawl4AI and MarkItDown failed for {url}: {e}")
+            logging.error(f"Crawl4AI conversion failed for {url}: {e}")
             raise ConversionError(f"Failed to convert URL: {str(e)}")
 
 
@@ -90,12 +75,6 @@ async def convert_content(
     return await loop.run_in_executor(
         None, _sync_convert_content, converter, content, filename
     )
-
-
-async def convert_url(converter: MarkItDown, url: str) -> str:
-    """Convert URL content to markdown using MarkItDown (deprecated, use UrlConverter)"""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _sync_convert_url, converter, url)
 
 
 def _sync_convert_content(
@@ -110,9 +89,3 @@ def _sync_convert_content(
     with BytesIO(content) as stream:
         result = converter.convert_stream(stream, stream_info=stream_info)
         return result.markdown
-
-
-def _sync_convert_url(converter: MarkItDown, url: str) -> str:
-    """Synchronous URL conversion"""
-    result = converter.convert(url)
-    return result.markdown

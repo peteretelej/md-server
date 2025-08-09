@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     azure_doc_intel_endpoint: Optional[str] = None
     azure_doc_intel_key: Optional[str] = None
     
-    crawl4ai_enabled: bool = Field(default=True, description="Enable Crawl4AI for URL conversion")
     crawl4ai_js_rendering: bool = Field(default=False, description="Enable JavaScript rendering (requires playwright)")
     crawl4ai_timeout: int = Field(default=30, description="Page load timeout in seconds")
     crawl4ai_user_agent: Optional[str] = Field(default=None, description="User agent string (uses Crawl4AI default if None)")

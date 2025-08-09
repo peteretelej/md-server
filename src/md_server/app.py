@@ -8,6 +8,7 @@ from markitdown import MarkItDown
 from .core.config import get_settings, Settings
 from .controllers import ConvertController
 from .middleware.auth import create_auth_middleware
+from .converter import UrlConverter
 
 
 @get("/healthz")
@@ -47,6 +48,11 @@ def provide_settings() -> Settings:
     return get_settings()
 
 
+def provide_url_converter(settings: Settings) -> UrlConverter:
+    """Provide UrlConverter instance with settings"""
+    return UrlConverter(settings)
+
+
 settings = get_settings()
 
 middleware = []
@@ -59,6 +65,7 @@ app = Litestar(
     dependencies={
         "converter": Provide(provide_converter, sync_to_thread=False),
         "settings": Provide(provide_settings, sync_to_thread=False),
+        "url_converter": Provide(provide_url_converter, sync_to_thread=False),
     },
     middleware=middleware,
     debug=settings.debug,
