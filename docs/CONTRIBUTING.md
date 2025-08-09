@@ -13,7 +13,9 @@
 git clone https://github.com/peteretelej/md-server.git
 cd md-server
 uv sync
-uv run playwright install
+
+# Optional: Install Playwright browsers for enhanced URL conversion
+uv run playwright install chromium
 ```
 
 ## Running Locally
@@ -85,6 +87,33 @@ ln -sf ./scripts/pre-push .git/hooks/pre-push
 - Use Pydantic models for validation
 - Prefer async/await for I/O
 - Self-documenting code
+
+## Enhanced URL Conversion (Optional)
+
+By default, md-server uses MarkItDown for URL conversion, which works well for most websites. For JavaScript-heavy sites, you can enable enhanced conversion:
+
+### Install Playwright Browsers
+
+```bash
+uvx playwright install-deps
+uvx playwright install chromium
+```
+
+### Benefits of Browser-Based Conversion
+
+- **JavaScript rendering**: Properly handles dynamic content
+- **Better extraction**: More accurate content from modern web apps
+- **Enhanced crawling**: Advanced page interaction capabilities
+
+### Verification
+
+Restart the server to see the conversion mode:
+
+```bash
+uv run python -m md_server
+# With browsers: "URL Conversion: Using Crawl4AI with Playwright browsers"
+# Without browsers: "URL Conversion: Playwright browsers not available, falling back to MarkItDown"
+```
 
 ## Dependencies
 

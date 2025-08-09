@@ -1,5 +1,6 @@
 import os
 import requests
+import logging
 from litestar import Litestar, get
 from litestar.di import Provide
 from litestar.response import Response
@@ -8,7 +9,7 @@ from markitdown import MarkItDown
 from .core.config import get_settings, Settings
 from .controllers import ConvertController
 from .middleware.auth import create_auth_middleware
-from .converter import UrlConverter
+from .converter import UrlConverter, check_browser_availability
 
 
 @get("/healthz")
@@ -49,8 +50,36 @@ def provide_settings() -> Settings:
 
 
 def provide_url_converter(settings: Settings) -> UrlConverter:
-    """Provide UrlConverter instance with settings"""
-    return UrlConverter(settings)
+    """Provide UrlConverter instance with settings and browser availability"""
+    # Get browser availability from app state
+    browser_available = getattr(provide_url_converter, "_browser_available", False)
+    return UrlConverter(settings, browser_available)
+
+
+async def startup_browser_detection():
+    """Detect browser availability at startup and configure logging"""
+    logging.basicConfig(level=logging.INFO)
+
+    try:
+        browser_available = await check_browser_availability()
+        provide_url_converter._browser_available = browser_available
+
+        if browser_available:
+            logging.info(
+                "URL Conversion: Using Crawl4AI with Playwright browsers (JavaScript support enabled)"
+            )
+        else:
+            logging.warning(
+                "URL Conversion: Playwright browsers not available, falling back to MarkItDown"
+            )
+            logging.warning("  • JavaScript-heavy sites may not render properly")
+            logging.warning(
+                "  • Install with: uvx playwright install-deps && uvx playwright install chromium"
+            )
+
+    except Exception as e:
+        logging.error(f"Startup browser detection failed: {e}")
+        provide_url_converter._browser_available = False
 
 
 settings = get_settings()
@@ -70,4 +99,5 @@ app = Litestar(
     middleware=middleware,
     debug=settings.debug,
     state={"config": settings},
+    on_startup=[startup_browser_detection],
 )

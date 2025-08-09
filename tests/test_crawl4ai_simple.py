@@ -10,7 +10,7 @@ class TestUrlConverterSimple:
 
     def setup_method(self):
         self.settings = Settings()
-        self.converter = UrlConverter(self.settings)
+        self.converter = UrlConverter(self.settings, browser_available=False)
 
     @pytest.mark.asyncio
     async def test_convert_url_success(self):
@@ -87,7 +87,7 @@ class TestIntegrationWithRealCrawl4AI:
 
     def setup_method(self):
         self.settings = Settings(crawl4ai_timeout=10)  # Short timeout for tests
-        self.converter = UrlConverter(self.settings)
+        self.converter = UrlConverter(self.settings, browser_available=False)
 
     @pytest.mark.asyncio
     async def test_real_url_conversion_httpbin(self):
@@ -125,7 +125,7 @@ class TestSettings:
         custom_settings = Settings(
             crawl4ai_timeout=60, crawl4ai_user_agent="test-agent", debug=True
         )
-        converter = UrlConverter(custom_settings)
+        converter = UrlConverter(custom_settings, browser_available=False)
 
         assert converter.settings.crawl4ai_timeout == 60
         assert converter.settings.crawl4ai_user_agent == "test-agent"
@@ -134,7 +134,7 @@ class TestSettings:
     def test_default_settings(self):
         """Test default settings values"""
         settings = Settings()
-        converter = UrlConverter(settings)
+        converter = UrlConverter(settings, browser_available=False)
 
         assert converter.settings.crawl4ai_timeout == 30
         assert converter.settings.crawl4ai_js_rendering is False
