@@ -1,5 +1,7 @@
 # md-server
 
+**Convert any document, webpage, or media file to markdown via HTTP API.**
+
 [![CI](https://github.com/peteretelej/md-server/actions/workflows/ci.yml/badge.svg)](https://github.com/peteretelej/md-server/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/peteretelej/md-server/branch/main/graph/badge.svg)](https://codecov.io/gh/peteretelej/md-server)
 [![PyPI version](https://img.shields.io/pypi/v/md-server.svg)](https://pypi.org/project/md-server/)
@@ -7,71 +9,129 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/peteretelej/md-server/pkgs/container/md-server)
 
-HTTP API server for converting documents (PDF, Office document types), audio, web pages, Youtube videos and more to markdown.
+md-server provides a HTTP API that accepts files, URLs, or raw content converts it into markdown. It automatically detects input types, handles everything from PDFs and Office documents, Youtube videos, images, to web pages with JavaScript rendering, and requires zero configuration to get started. Under the hood, it uses Microsoft's MarkItDown for document conversion and Crawl4AI for intelligent web scraping.
+
+## Quick Start
+
+```bash
+# Starts server at localhost:8080
+uvx md-server
+
+# Convert a file
+curl -X POST localhost:8080/convert --data-binary @document.pdf
+
+# Convert a URL
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+```
 
 ## Installation
 
-```bash
-uvx md-server
-```
-
-## Usage
+### Using uvx (Recommended)
 
 ```bash
-# Start server (default: localhost:8080)
 uvx md-server
-
-# Listen on all interfaces (for Docker/remote access)
-uvx md-server --host 0.0.0.0
-
-# Start on custom port
-uvx md-server --port 9000
-
-# Convert file
-curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
-
-# Convert URL
-curl -X POST http://localhost:8080/convert/url \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/article"}'
-
-# Health check
-curl http://localhost:8080/healthz
 ```
 
 ### Using Docker
 
-```bash
-# Run Docker image
-docker run -d -p 127.0.0.1:8080:8080 --name md-server \
-  --restart unless-stopped \
-  ghcr.io/peteretelej/md-server
+You can run on Docker using the [md-server docker image](https://github.com/peteretelej/md-server/pkgs/container/md-server)
 
-# Convert file
-curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
+```bash
+docker run -p 127.0.0.1:8080:8080 ghcr.io/peteretelej/md-server
 ```
 
-## Example Output
+## API
 
-Convert a file to markdown:
+### `POST /convert`
+
+Single endpoint that accepts multiple input types and automatically detects what you're sending.
+
+#### Input Methods
 
 ```bash
-$ curl -X POST http://localhost:8080/convert -F "file=@document.pdf"
+# Binary file upload
+curl -X POST localhost:8080/convert --data-binary @document.pdf
+
+# Multipart form upload
+curl -X POST localhost:8080/convert -F "file=@presentation.pptx"
+
+# URL conversion
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+
+# Base64 content
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"content": "base64_encoded_file_here", "filename": "report.docx"}'
+
+# Raw text
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"text": "# Already Markdown\n\nBut might need cleaning"}'
+```
+
+#### Response Format
+
+```json
 {
-  "markdown": "# Document Title\n\nThis is the converted content from the PDF...\n\n## Section 1\n\nMore content here."
+  "success": true,
+  "markdown": "# Converted Content\n\nYour markdown here...",
+  "metadata": {
+    "source_type": "pdf",
+    "source_size": 102400,
+    "markdown_size": 8192,
+    "conversion_time_ms": 245,
+    "detected_format": "application/pdf"
+  },
+  "request_id": "req_550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-Health check response:
+#### Options
 
-```bash
-$ curl http://localhost:8080/healthz
+```json
 {
-  "status": "healthy"
+  "url": "https://example.com",
+  "options": {
+    "js_rendering": true, // Use headless browser for JavaScript sites
+    "extract_images": true, // Extract and link images
+    "ocr_enabled": true, // OCR for scanned PDFs/images
+    "preserve_formatting": true // Keep complex formatting
+  }
 }
 ```
 
-## Enhanced URL Conversion (Optional)
+### `GET /formats`
+
+Returns supported formats and capabilities.
+
+```bash
+curl localhost:8080/formats
+```
+
+### `GET /health`
+
+Health check endpoint.
+
+```bash
+curl localhost:8080/health
+```
+
+## Supported Formats
+
+**Documents**: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP  
+**Web**: HTML, URLs (with JavaScript rendering)  
+**Images**: PNG, JPG, JPEG (with OCR)  
+**Audio**: MP3, WAV (transcription)  
+**Video**: YouTube URLs  
+**Text**: TXT, MD, CSV, XML, JSON
+
+## Advanced Usage
+
+### Enhanced URL Conversion (Optional)
 
 By default, md-server uses MarkItDown for URL conversion. To enable **Crawl4AI** for advanced web crawling with JavaScript rendering, install Playwright browsers:
 
@@ -82,11 +142,59 @@ uvx playwright install chromium
 
 If Playwright browsers are available, md-server will use Crawl4AI automatically for URL conversions. It provides better handling of JavaScript-heavy sites, smart content extraction and cleaning, and many more features.
 
-## Endpoints
+### Pipe from Other Commands
 
-- `GET /healthz` - Health check
-- `POST /convert` - Convert uploaded file to markdown
-- `POST /convert/url` - Convert content from URL to markdown
+```bash
+# Convert HTML from stdin
+echo "<h1>Hello</h1>" | curl -X POST localhost:8080/convert \
+  --data-binary @- \
+  -H "Content-Type: text/html"
+
+# Chain with other tools
+pdftotext document.pdf - | curl -X POST localhost:8080/convert \
+  --data-binary @-
+```
+
+### Python Client Example
+
+```python
+import requests
+
+# Convert file
+with open('document.pdf', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8080/convert',
+        data=f.read(),
+        headers={'Content-Type': 'application/pdf'}
+    )
+    markdown = response.json()['markdown']
+
+# Convert URL
+response = requests.post(
+    'http://localhost:8080/convert',
+    json={'url': 'https://example.com'}
+)
+markdown = response.json()['markdown']
+```
+
+## Error Handling
+
+Errors include actionable information:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNSUPPORTED_FORMAT",
+    "message": "File format not supported",
+    "details": {
+      "detected_format": "application/x-rar",
+      "supported_formats": ["pdf", "docx", "html", "..."]
+    }
+  },
+  "request_id": "req_550e8400-e29b-41d4-a716-446655440000"
+}
+```
 
 ## Development
 
@@ -96,7 +204,7 @@ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for development setup, testing, and 
 
 This project makes use of these excellent tools:
 
-[![Powered by Crawl4AI](https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/assets/powered-by-light.svg)](https://github.com/unclecode/crawl4ai) [![microsoft/markitdown](https://img.shields.io/badge/microsoft-MarkItDown-0078D4?style=for-the-badge&logo=microsoft)](https://github.com/microsoft/markitdown)
+[![Powered by Crawl4AI](https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/assets/powered-by-light.svg)](https://github.com/unclecode/crawl4ai) [![microsoft/markitdown](https://img.shields.io/badge/microsoft-MarkItDown-0078D4?style=for-the-badge&logo=microsoft)](https://github.com/microsoft/markitdown) [![Litestar Project](https://img.shields.io/badge/Litestar%20Org-%E2%AD%90%20Litestar-202235.svg?logo=python&labelColor=202235&color=edb641&logoColor=edb641)](https://github.com/litestar-org/litestar)
 
 ## License
 
