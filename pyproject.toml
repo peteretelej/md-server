@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-server"
-version = "0.0.1"
-description = "HTTP API server for converting most content to markdown"
+version = "0.1.0"
+description = "HTTP API server for converting documents, web pages, and media to markdown"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -17,7 +17,7 @@ maintainers = [
     {name = "Peter Etelej", email = "peter@etelej.com"}
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
     "Topic :: Text Processing :: Markup",
@@ -31,11 +31,10 @@ classifiers = [
 dependencies = [
     "litestar[standard]>=2.0.0",
     "markitdown[all]>=0.0.1",
-    "httpx>=0.25.0",
     "pydantic>=2.11.7",
     "pydantic-settings>=2.10.1",
     "crawl4ai>=0.7.0",
-    "playwright",
+    "click!=8.2.2",
 ]
 
 [project.urls]
@@ -64,6 +63,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
 markers = [
