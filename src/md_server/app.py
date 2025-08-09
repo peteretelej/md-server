@@ -5,6 +5,7 @@ from litestar.status_codes import HTTP_200_OK
 from markitdown import MarkItDown
 from .core.config import get_settings, Settings
 from .controllers import ConvertController
+from .middleware.auth import create_auth_middleware
 
 
 @get("/healthz")
@@ -25,12 +26,18 @@ def provide_settings() -> Settings:
 
 settings = get_settings()
 
+middleware = []
+auth_middleware_class = create_auth_middleware(settings)
+if auth_middleware_class:
+    middleware.append(auth_middleware_class)
+
 app = Litestar(
     route_handlers=[healthz, ConvertController],
     dependencies={
         "converter": Provide(provide_converter, sync_to_thread=False),
         "settings": Provide(provide_settings, sync_to_thread=False),
     },
+    middleware=middleware,
     debug=settings.debug,
     state={"config": settings},
 )
