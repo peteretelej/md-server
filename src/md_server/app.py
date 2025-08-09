@@ -70,11 +70,7 @@ async def startup_browser_detection():
             )
         else:
             logging.warning(
-                "URL Conversion: Playwright browsers not available, falling back to MarkItDown"
-            )
-            logging.warning("  • JavaScript-heavy sites may not render properly")
-            logging.warning(
-                "  • Install with: uvx playwright install-deps && uvx playwright install chromium"
+                "WARNING: URL Conversion: Playwright browsers not available, using MarkItDown for basic URL conversions. Install Playwright for Crawl4AI with Javascript support. Please see https://github.com/peteretelej/md-server?tab=readme-ov-file#enhanced-url-conversion-optional"
             )
 
     except Exception as e:

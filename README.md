@@ -71,22 +71,22 @@ $ curl http://localhost:8080/healthz
 }
 ```
 
-## Endpoints
-
-- `GET /healthz` - Health check
-- `POST /convert` - Convert uploaded file to markdown
-- `POST /convert/url` - Convert content from URL to markdown
-
 ## Enhanced URL Conversion (Optional)
 
-For better JavaScript-heavy website conversion, install Playwright browsers:
+By default, md-server uses MarkItDown for URL conversion. To enable **Crawl4AI** for advanced web crawling with JavaScript rendering, install Playwright browsers:
 
 ```bash
 uvx playwright install-deps
 uvx playwright install chromium
 ```
 
-This enables advanced crawling with JavaScript rendering. Without browsers, md-server automatically falls back to standard HTTP-based conversion.
+If Playwright browsers are available, md-server will use Crawl4AI automatically for URL conversions. It provides better handling of JavaScript-heavy sites, smart content extraction and cleaning, and many more features.
+
+## Endpoints
+
+- `GET /healthz` - Health check
+- `POST /convert` - Convert uploaded file to markdown
+- `POST /convert/url` - Convert content from URL to markdown
 
 ## Development
 

@@ -31,9 +31,6 @@ async def check_browser_availability() -> bool:
             keyword in error_str.lower()
             for keyword in ["playwright", "browser", "executable", "chromium"]
         ):
-            logging.info(
-                f"Browser detection: Playwright browsers not available - {error_str}"
-            )
             return False
         # Re-raise unexpected errors
         raise
