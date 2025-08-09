@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     http_proxy: Optional[str] = None
     https_proxy: Optional[str] = None
     
+    openai_api_key: Optional[str] = None
+    azure_doc_intel_endpoint: Optional[str] = None
+    azure_doc_intel_key: Optional[str] = None
+    
+    crawl4ai_timeout: int = 30
+    crawl4ai_max_pages: int = 10
+    crawl4ai_user_agent: str = "md-server/1.0"
+    
     allowed_file_types: List[str] = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
