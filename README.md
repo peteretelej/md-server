@@ -106,3 +106,14 @@ uv add --dev pytest ruff mypy
 docker build -t md-server .
 docker run -p 8080:8080 md-server
 ```
+
+## Powered By
+
+This project makes use of these excellent tools:
+
+<a href="https://github.com/unclecode/crawl4ai">
+  <img src="https://raw.githubusercontent.com/unclecode/crawl4ai/main/docs/assets/powered-by-light.svg" alt="Powered by Crawl4AI" width="200"/>
+</a>
+<a href="https://github.com/microsoft/markitdown">
+  <img src="https://img.shields.io/badge/microsoft-MarkItDown-0078D4?style=for-the-badge&logo=microsoft" alt="microsoft/markitdown"/>
+</a>
