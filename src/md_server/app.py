@@ -1,3 +1,5 @@
+import os
+import requests
 from litestar import Litestar, get
 from litestar.di import Provide
 from litestar.response import Response
@@ -14,9 +16,30 @@ async def healthz() -> Response:
     return Response({"status": "healthy"}, status_code=HTTP_200_OK)
 
 
+def create_requests_session(settings: Settings) -> requests.Session:
+    """Create requests session with proxy configuration"""
+    session = requests.Session()
+    
+    proxies = {}
+    if settings.http_proxy:
+        proxies['http'] = settings.http_proxy
+        os.environ['HTTP_PROXY'] = settings.http_proxy
+        
+    if settings.https_proxy:
+        proxies['https'] = settings.https_proxy
+        os.environ['HTTPS_PROXY'] = settings.https_proxy
+        
+    if proxies:
+        session.proxies.update(proxies)
+        
+    return session
+
+
 def provide_converter() -> MarkItDown:
     """Provide MarkItDown converter instance as singleton"""
-    return MarkItDown()
+    settings = get_settings()
+    session = create_requests_session(settings)
+    return MarkItDown(requests_session=session)
 
 
 def provide_settings() -> Settings:
