@@ -1,4 +1,4 @@
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 from typing import List, Optional
 
@@ -20,9 +20,14 @@ class Settings(BaseSettings):
     azure_doc_intel_endpoint: Optional[str] = None
     azure_doc_intel_key: Optional[str] = None
     
-    crawl4ai_timeout: int = 30
-    crawl4ai_max_pages: int = 10
-    crawl4ai_user_agent: str = "md-server/1.0"
+    crawl4ai_enabled: bool = Field(default=True, description="Enable Crawl4AI for URL conversion")
+    crawl4ai_js_rendering: bool = Field(default=False, description="Enable JavaScript rendering (requires playwright)")
+    crawl4ai_timeout: int = Field(default=30, description="Page load timeout in seconds")
+    crawl4ai_user_agent: Optional[str] = Field(default=None, description="User agent string (uses Crawl4AI default if None)")
+    
+    llm_provider_url: Optional[str] = Field(default=None, description="LLM provider endpoint (e.g., https://openrouter.ai/api/v1)")
+    llm_api_key: Optional[str] = Field(default=None, description="LLM API key")
+    llm_model: str = Field(default="google/gemini-2.5-flash", description="LLM model identifier")
     
     allowed_file_types: List[str] = [
         "application/pdf",

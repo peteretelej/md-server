@@ -14,3 +14,4 @@ _temp/
 .coverage
 coverage.xml
 
+.env
