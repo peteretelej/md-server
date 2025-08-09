@@ -1,4 +1,3 @@
-from litestar import Request, Response
 from litestar.exceptions import NotAuthorizedException
 from litestar.middleware.authentication import AbstractAuthenticationMiddleware, AuthenticationResult
 from litestar.connection import ASGIConnection

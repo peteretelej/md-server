@@ -1,5 +1,4 @@
 import os
-import pytest
 from unittest.mock import patch
 from md_server.core.config import Settings, get_settings
 

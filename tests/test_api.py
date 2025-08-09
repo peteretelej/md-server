@@ -69,6 +69,65 @@ class TestAPI:
                 assert response.status_code == 200
                 data = response.json()
                 assert data["markdown"] == "# Test Content"
+                mock_convert.assert_called_once_with("https://example.com", None)
+
+    @pytest.mark.asyncio
+    async def test_convert_url_with_js_rendering(self):
+        """Test URL conversion with JavaScript rendering enabled"""
+        with patch("md_server.converter.UrlConverter.convert_url") as mock_convert:
+            mock_convert.return_value = "# Dynamic Content\n\nJavaScript rendered content"
+            
+            async with AsyncTestClient(app=app) as client:
+                response = await client.post(
+                    "/convert/url", 
+                    json={
+                        "url": "https://spa-example.com",
+                        "js_rendering": True
+                    }
+                )
+                
+                assert response.status_code == 200
+                data = response.json()
+                assert data["markdown"] == "# Dynamic Content\n\nJavaScript rendered content"
+                mock_convert.assert_called_once_with("https://spa-example.com", True)
+
+    @pytest.mark.asyncio
+    async def test_convert_url_with_js_rendering_false(self):
+        """Test URL conversion with JavaScript rendering explicitly disabled"""
+        with patch("md_server.converter.UrlConverter.convert_url") as mock_convert:
+            mock_convert.return_value = "# Static Content"
+            
+            async with AsyncTestClient(app=app) as client:
+                response = await client.post(
+                    "/convert/url", 
+                    json={
+                        "url": "https://example.com",
+                        "js_rendering": False
+                    }
+                )
+                
+                assert response.status_code == 200
+                data = response.json()
+                assert data["markdown"] == "# Static Content"
+                mock_convert.assert_called_once_with("https://example.com", False)
+
+    @pytest.mark.asyncio
+    async def test_convert_url_conversion_error(self):
+        """Test URL conversion when ConversionError is raised"""
+        from md_server.converter import ConversionError
+        
+        with patch("md_server.converter.UrlConverter.convert_url") as mock_convert:
+            mock_convert.side_effect = ConversionError("Failed to crawl URL")
+            
+            async with AsyncTestClient(app=app) as client:
+                response = await client.post(
+                    "/convert/url", 
+                    json={"url": "https://failing-url.com"}
+                )
+                
+                assert response.status_code == 400  # Bad request for URL-related errors
+                data = response.json()
+                assert "Failed to crawl URL" in str(data["detail"])
 
     @pytest.mark.asyncio
     async def test_convert_url_invalid_format(self):

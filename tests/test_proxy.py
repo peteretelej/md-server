@@ -1,5 +1,4 @@
 import os
-import pytest
 from unittest.mock import patch, MagicMock
 import requests
 from md_server.app import create_requests_session, provide_converter

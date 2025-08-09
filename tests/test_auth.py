@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch
 from litestar import Litestar, get
 from litestar.testing import TestClient

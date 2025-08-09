@@ -1,5 +1,3 @@
-import os
-import pytest
 from md_server.core.config import Settings
 
 
@@ -24,7 +22,7 @@ class TestCompleteConfiguration:
         monkeypatch.setenv("MD_SERVER_CRAWL4AI_USER_AGENT", "custom-agent/2.0")
         
         settings = Settings()
-        assert settings.crawl4ai_js_rendering == True
+        assert settings.crawl4ai_js_rendering
         assert settings.crawl4ai_timeout == 60
         assert settings.crawl4ai_user_agent == "custom-agent/2.0"
     
@@ -33,7 +31,7 @@ class TestCompleteConfiguration:
         assert settings.openai_api_key is None
         assert settings.azure_doc_intel_endpoint is None
         assert settings.azure_doc_intel_key is None
-        assert settings.crawl4ai_js_rendering == False
+        assert not settings.crawl4ai_js_rendering
         assert settings.crawl4ai_timeout == 30
         assert settings.crawl4ai_user_agent is None
     
