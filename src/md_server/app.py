@@ -1,5 +1,3 @@
-import os
-import requests
 import logging
 import time
 from litestar import Litestar, get
@@ -14,6 +12,7 @@ from .converter import UrlConverter
 from .browser import BrowserChecker
 from .models import HealthResponse, FormatsResponse
 from .detection import ContentTypeDetector
+from .factories import MarkItDownFactory
 
 # Track server start time for uptime calculation
 _server_start_time = time.time()
@@ -46,66 +45,10 @@ async def healthz() -> Response:
     return Response({"status": "healthy"}, status_code=HTTP_200_OK)
 
 
-def create_requests_session(settings: Settings) -> requests.Session:
-    """Create requests session with proxy configuration"""
-    session = requests.Session()
-
-    proxies = {}
-    if settings.http_proxy:
-        proxies["http"] = settings.http_proxy
-        os.environ["HTTP_PROXY"] = settings.http_proxy
-
-    if settings.https_proxy:
-        proxies["https"] = settings.https_proxy
-        os.environ["HTTPS_PROXY"] = settings.https_proxy
-
-    if proxies:
-        session.proxies.update(proxies)
-
-    return session
-
-
 def provide_converter() -> MarkItDown:
-    """Provide MarkItDown converter instance as singleton"""
+    """Provide MarkItDown converter instance using factory"""
     settings = get_settings()
-    session = create_requests_session(settings)
-
-    # Configure LLM client for image descriptions if available
-    llm_client = None
-    llm_model = None
-
-    if settings.openai_api_key:
-        try:
-            from openai import OpenAI
-
-            llm_client = OpenAI(
-                api_key=settings.openai_api_key, base_url=settings.llm_provider_url
-            )
-            llm_model = settings.llm_model
-        except ImportError:
-            logging.warning(
-                "OpenAI client not available - image descriptions will be disabled"
-            )
-
-    # Configure Azure Document Intelligence if available
-    docintel_endpoint = settings.azure_doc_intel_endpoint
-    docintel_credential = None
-    if settings.azure_doc_intel_key and docintel_endpoint:
-        try:
-            from azure.core.credentials import AzureKeyCredential
-
-            docintel_credential = AzureKeyCredential(settings.azure_doc_intel_key)
-        except ImportError:
-            logging.warning("Azure Document Intelligence not available")
-            docintel_endpoint = None
-
-    return MarkItDown(
-        requests_session=session,
-        llm_client=llm_client,
-        llm_model=llm_model,
-        docintel_endpoint=docintel_endpoint,
-        docintel_credential=docintel_credential,
-    )
+    return MarkItDownFactory.create(settings)
 
 
 def provide_settings() -> Settings:
