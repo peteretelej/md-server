@@ -15,8 +15,6 @@ import base64
 import time
 
 from .models import (
-    URLConvertRequest,
-    MarkdownResponse,
     ConvertResponse,
     ErrorResponse,
     ConversionOptions,
@@ -48,129 +46,33 @@ class ConvertController(Controller):
                 content_data,
                 request_data,
             ) = await self._detect_input_type(request)
-
-            # Create conversion options from request
-            options = ConversionOptions()
-            if request_data and "options" in request_data:
-                options = ConversionOptions(**request_data["options"])
-
-            # Apply appropriate timeout based on operation type
-            if input_type == "json_url":
-                # URL operations use URL fetch timeout (typically shorter)
-                timeout = options.timeout or settings.url_fetch_timeout
-                url = request_data.get("url")
-                js_rendering = options.js_rendering
-                markdown = await asyncio.wait_for(
-                    url_converter.convert_url(url, js_rendering),
-                    timeout=timeout,
-                )
-            else:
-                # File conversions use conversion timeout (typically longer)
-                timeout = options.timeout or settings.conversion_timeout
-                markdown = await asyncio.wait_for(
-                    self._convert_by_input_type(
-                        input_type,
-                        content_data,
-                        converter,
-                        url_converter,
-                        options,
-                        request_data,
-                    ),
-                    timeout=timeout,
-                )
-
-            # Calculate metrics
-            conversion_time_ms = int((time.time() - start_time) * 1000)
-            source_size = self._calculate_source_size(
-                input_type, content_data, request_data
+            options = self._extract_options(request_data)
+            timeout = self._get_timeout(input_type, options, settings)
+            markdown = await self._perform_conversion(
+                input_type,
+                content_data,
+                request_data,
+                options,
+                converter,
+                url_converter,
+                settings,
             )
-            source_type = ContentTypeDetector.get_source_type(format_type)
-
-            # Create successful response
-            response = ConvertResponse.create_success(
-                markdown=markdown,
-                source_type=source_type,
-                source_size=source_size,
-                conversion_time_ms=conversion_time_ms,
-                detected_format=format_type,
-                warnings=[],
+            response = self._create_success_response(
+                markdown,
+                format_type,
+                input_type,
+                content_data,
+                request_data,
+                start_time,
             )
-
             return Response(response, status_code=HTTP_200_OK)
 
         except asyncio.TimeoutError:
-            error_response = ErrorResponse.create_error(
-                code="TIMEOUT",
-                message=f"Conversion timed out after {timeout}s",
-                suggestions=["Try with a smaller file", "Increase timeout in options"],
-            )
-            raise HTTPException(
-                status_code=HTTP_408_REQUEST_TIMEOUT, detail=error_response.model_dump()
-            )
-
+            self._raise_timeout_error(timeout)
         except ValueError as e:
-            error_msg = str(e)
-
-            # Handle specific security-related errors
-            if "size" in error_msg.lower() and "exceeds" in error_msg.lower():
-                error_response = ErrorResponse.create_error(
-                    code="FILE_TOO_LARGE",
-                    message=error_msg,
-                    suggestions=["Use a smaller file", "Check size limits at /formats"],
-                )
-                raise HTTPException(
-                    status_code=413,
-                    detail=error_response.model_dump(),  # 413 Payload Too Large
-                )
-            elif "not allowed" in error_msg.lower() or "blocked" in error_msg.lower():
-                error_response = ErrorResponse.create_error(
-                    code="INVALID_URL",
-                    message=error_msg,
-                    suggestions=["Use a public URL", "Avoid private IP addresses"],
-                )
-                raise HTTPException(
-                    status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
-                )
-            elif "content type mismatch" in error_msg.lower():
-                error_response = ErrorResponse.create_error(
-                    code="INVALID_CONTENT",
-                    message=error_msg,
-                    suggestions=["Ensure file matches declared content type"],
-                )
-                raise HTTPException(
-                    status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
-                )
-            else:
-                error_response = ErrorResponse.create_error(
-                    code="INVALID_INPUT",
-                    message=error_msg,
-                    suggestions=["Check input format", "Verify JSON structure"],
-                )
-                raise HTTPException(
-                    status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
-                )
-
+            self._handle_value_error(str(e))
         except Exception as e:
-            error_msg = str(e)
-            if "unsupported" in error_msg.lower():
-                error_response = ErrorResponse.create_error(
-                    code="UNSUPPORTED_FORMAT",
-                    message=error_msg,
-                    details={"detected_format": format_type},
-                    suggestions=["Check supported formats at /formats"],
-                )
-                raise HTTPException(
-                    status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                    detail=error_response.model_dump(),
-                )
-
-            error_response = ErrorResponse.create_error(
-                code="CONVERSION_FAILED", message=f"Conversion failed: {error_msg}"
-            )
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=error_response.model_dump(),
-            )
+            self._handle_generic_error(str(e), locals().get("format_type"))
 
     async def _detect_input_type(self, request: Request) -> tuple:
         """Detect input type from request"""
@@ -313,34 +215,148 @@ class ConvertController(Controller):
             return len(content_data["content"])
         return 0
 
-    # Legacy endpoints for backward compatibility
-    @post("/url")
-    async def convert_url_endpoint(
+    def _extract_options(self, request_data: dict = None) -> ConversionOptions:
+        """Extract and create conversion options from request data"""
+        if request_data and "options" in request_data:
+            return ConversionOptions(**request_data["options"])
+        return ConversionOptions()
+
+    def _get_timeout(
+        self, input_type: str, options: ConversionOptions, settings: Settings
+    ) -> int:
+        """Get appropriate timeout based on input type and options"""
+        if input_type == "json_url":
+            return options.timeout or settings.url_fetch_timeout
+        return options.timeout or settings.conversion_timeout
+
+    async def _perform_conversion(
         self,
-        data: URLConvertRequest,
+        input_type: str,
+        content_data: dict,
+        request_data: dict,
+        options: ConversionOptions,
+        converter: MarkItDown,
         url_converter: UrlConverter,
         settings: Settings,
-    ) -> Response[MarkdownResponse]:
-        """Legacy URL conversion endpoint"""
-        try:
-            markdown = await asyncio.wait_for(
-                url_converter.convert_url(data.url, data.js_rendering),
-                timeout=settings.timeout_seconds,
+    ) -> str:
+        """Perform the actual conversion based on input type"""
+        timeout = self._get_timeout(input_type, options, settings)
+
+        if input_type == "json_url":
+            url = request_data.get("url")
+            return await asyncio.wait_for(
+                url_converter.convert_url(url, options.js_rendering),
+                timeout=timeout,
+            )
+        else:
+            return await asyncio.wait_for(
+                self._convert_by_input_type(
+                    input_type,
+                    content_data,
+                    converter,
+                    url_converter,
+                    options,
+                    request_data,
+                ),
+                timeout=timeout,
             )
 
-            return Response(
-                MarkdownResponse(markdown=markdown), status_code=HTTP_200_OK
+    def _create_success_response(
+        self,
+        markdown: str,
+        format_type: str,
+        input_type: str,
+        content_data: dict,
+        request_data: dict,
+        start_time: float,
+    ) -> ConvertResponse:
+        """Create a successful conversion response"""
+        conversion_time_ms = int((time.time() - start_time) * 1000)
+        source_size = self._calculate_source_size(
+            input_type, content_data, request_data
+        )
+        source_type = ContentTypeDetector.get_source_type(format_type)
+
+        return ConvertResponse.create_success(
+            markdown=markdown,
+            source_type=source_type,
+            source_size=source_size,
+            conversion_time_ms=conversion_time_ms,
+            detected_format=format_type,
+            warnings=[],
+        )
+
+    def _raise_timeout_error(self, timeout: int) -> None:
+        """Raise timeout error with appropriate message"""
+        error_response = ErrorResponse.create_error(
+            code="TIMEOUT",
+            message=f"Conversion timed out after {timeout}s",
+            suggestions=["Try with a smaller file", "Increase timeout in options"],
+        )
+        raise HTTPException(
+            status_code=HTTP_408_REQUEST_TIMEOUT, detail=error_response.model_dump()
+        )
+
+    def _handle_value_error(self, error_msg: str) -> None:
+        """Handle ValueError with specific error type detection"""
+        error_mappings = [
+            (
+                ["size", "exceeds"],
+                "FILE_TOO_LARGE",
+                413,
+                ["Use a smaller file", "Check size limits at /formats"],
+            ),
+            (
+                ["not allowed", "blocked"],
+                "INVALID_URL",
+                HTTP_400_BAD_REQUEST,
+                ["Use a public URL", "Avoid private IP addresses"],
+            ),
+            (
+                ["content type mismatch"],
+                "INVALID_CONTENT",
+                HTTP_400_BAD_REQUEST,
+                ["Ensure file matches declared content type"],
+            ),
+        ]
+
+        for keywords, code, status_code, suggestions in error_mappings:
+            if any(keyword in error_msg.lower() for keyword in keywords):
+                error_response = ErrorResponse.create_error(
+                    code=code, message=error_msg, suggestions=suggestions
+                )
+                raise HTTPException(
+                    status_code=status_code, detail=error_response.model_dump()
+                )
+
+        # Default ValueError handling
+        error_response = ErrorResponse.create_error(
+            code="INVALID_INPUT",
+            message=error_msg,
+            suggestions=["Check input format", "Verify JSON structure"],
+        )
+        raise HTTPException(
+            status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
+        )
+
+    def _handle_generic_error(self, error_msg: str, format_type: str = None) -> None:
+        """Handle generic exceptions with format-specific handling"""
+        if "unsupported" in error_msg.lower():
+            error_response = ErrorResponse.create_error(
+                code="UNSUPPORTED_FORMAT",
+                message=error_msg,
+                details={"detected_format": format_type} if format_type else None,
+                suggestions=["Check supported formats at /formats"],
+            )
+            raise HTTPException(
+                status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=error_response.model_dump(),
             )
 
-        except asyncio.TimeoutError:
-            raise HTTPException(
-                status_code=HTTP_408_REQUEST_TIMEOUT,
-                detail=f"URL conversion timed out after {settings.timeout_seconds}s",
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e))
-        except Exception as e:
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Conversion failed: {str(e)}",
-            )
+        error_response = ErrorResponse.create_error(
+            code="CONVERSION_FAILED", message=f"Conversion failed: {error_msg}"
+        )
+        raise HTTPException(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_response.model_dump(),
+        )

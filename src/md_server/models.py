@@ -131,16 +131,6 @@ class ErrorResponse(BaseModel):
         )
 
 
-# Legacy models for backward compatibility
-class URLConvertRequest(BaseModel):
-    url: str
-    js_rendering: Optional[bool] = None
-
-
-class MarkdownResponse(BaseModel):
-    markdown: str
-
-
 # Models for /formats endpoint
 class FormatCapabilities(BaseModel):
     mime_types: List[str] = Field(description="Supported MIME types")
