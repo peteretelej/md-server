@@ -117,18 +117,36 @@ class UrlConverter:
             raise ValueError(f"Failed to convert URL: {str(e)}")
 
 
+def create_converter_with_options(
+    base_converter: MarkItDown, options: Optional[dict] = None
+) -> MarkItDown:
+    """Create a MarkItDown converter with specific options"""
+    if not options:
+        return base_converter
+
+    # For now, we'll use the base converter since most options are constructor-level
+    # In a full implementation, you might create new instances with different configurations
+    return base_converter
+
+
 async def convert_content(
-    converter: MarkItDown, content: bytes, filename: Optional[str] = None
+    converter: MarkItDown,
+    content: bytes,
+    filename: Optional[str] = None,
+    options: Optional[dict] = None,
 ) -> str:
     """Convert binary content to markdown using MarkItDown"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        None, _sync_convert_content, converter, content, filename
+        None, _sync_convert_content, converter, content, filename, options
     )
 
 
 def _sync_convert_content(
-    converter: MarkItDown, content: bytes, filename: Optional[str] = None
+    converter: MarkItDown,
+    content: bytes,
+    filename: Optional[str] = None,
+    options: Optional[dict] = None,
 ) -> str:
     """Synchronous content conversion"""
     stream_info = None
@@ -136,6 +154,47 @@ def _sync_convert_content(
         path = Path(filename)
         stream_info = StreamInfo(extension=path.suffix.lower(), filename=filename)
 
+    # Apply conversion options
+    kwargs = {}
+    if options:
+        # These options don't need to be passed to convert_stream as they're handled in MarkItDown constructor
+        # We'll just apply basic processing options here
+        pass
+
     with BytesIO(content) as stream:
-        result = converter.convert_stream(stream, stream_info=stream_info)
-        return result.markdown
+        result = converter.convert_stream(stream, stream_info=stream_info, **kwargs)
+        markdown = result.markdown
+
+        # Apply post-processing options
+        if options:
+            if options.get("clean_markdown", False):
+                markdown = _clean_markdown(markdown)
+            if options.get("max_length") and len(markdown) > options["max_length"]:
+                markdown = markdown[: options["max_length"]] + "..."
+
+        return markdown
+
+
+def _clean_markdown(markdown: str) -> str:
+    """Clean and normalize markdown content"""
+    if not markdown:
+        return markdown
+
+    # Basic cleaning operations
+    lines = markdown.split("\n")
+    cleaned_lines = []
+
+    for line in lines:
+        # Remove excessive whitespace
+        line = line.strip()
+        if line:
+            cleaned_lines.append(line)
+        elif cleaned_lines and cleaned_lines[-1] != "":
+            # Keep single empty lines between content
+            cleaned_lines.append("")
+
+    # Remove trailing empty lines
+    while cleaned_lines and cleaned_lines[-1] == "":
+        cleaned_lines.pop()
+
+    return "\n".join(cleaned_lines)

@@ -110,7 +110,7 @@ class ConvertController(Controller):
 
         except ValueError as e:
             error_msg = str(e)
-            
+
             # Handle specific security-related errors
             if "size" in error_msg.lower() and "exceeds" in error_msg.lower():
                 error_response = ErrorResponse.create_error(
@@ -119,7 +119,8 @@ class ConvertController(Controller):
                     suggestions=["Use a smaller file", "Check size limits at /formats"],
                 )
                 raise HTTPException(
-                    status_code=413, detail=error_response.model_dump()  # 413 Payload Too Large
+                    status_code=413,
+                    detail=error_response.model_dump(),  # 413 Payload Too Large
                 )
             elif "not allowed" in error_msg.lower() or "blocked" in error_msg.lower():
                 error_response = ErrorResponse.create_error(
@@ -197,15 +198,15 @@ class ConvertController(Controller):
 
                 file = form_data["file"]
                 content = await file.read()
-                
+
                 # Validate content type matches detected type
                 validated_type = ContentValidator.validate_content_type(
                     content, file.content_type
                 )
-                
+
                 # Validate file size
                 FileSizeValidator.validate_size(len(content), validated_type)
-                
+
                 input_type, format_type = ContentTypeDetector.detect_input_type(
                     content_type=validated_type,
                     filename=file.filename,
@@ -228,15 +229,15 @@ class ConvertController(Controller):
         else:
             try:
                 content = await request.body()
-                
+
                 # Validate content type matches detected type
                 validated_type = ContentValidator.validate_content_type(
                     content, content_type or None
                 )
-                
+
                 # Validate file size
                 FileSizeValidator.validate_size(len(content), validated_type)
-                
+
                 input_type, format_type = ContentTypeDetector.detect_input_type(
                     content_type=validated_type, content=content
                 )
@@ -266,9 +267,9 @@ class ConvertController(Controller):
                     content = base64.b64decode(request_data["content"])
                 except Exception:
                     raise ValueError("Invalid base64 content")
-                
+
                 filename = request_data.get("filename")
-                
+
                 # Validate content type and size for base64 content
                 detected_type = ContentValidator.detect_content_type(content)
                 FileSizeValidator.validate_size(len(content), detected_type)
@@ -276,14 +277,23 @@ class ConvertController(Controller):
                 content = content_data["content"]
                 filename = content_data.get("filename")
 
-            return await convert_content(converter, content, filename)
+            return await convert_content(
+                converter, content, filename, options.model_dump() if options else None
+            )
 
         elif input_type == "json_text":
-            # Return text as-is or apply cleaning if requested
+            # Return text as-is or apply processing if requested
             text = request_data["text"]
-            if options.clean_markdown:
-                # Apply basic markdown cleaning
-                return text.strip()
+
+            if options:
+                if options.clean_markdown:
+                    # Import the clean function from converter
+                    from .converter import _clean_markdown
+
+                    text = _clean_markdown(text)
+                if options.max_length and len(text) > options.max_length:
+                    text = text[: options.max_length] + "..."
+
             return text
 
         else:

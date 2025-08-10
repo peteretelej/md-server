@@ -68,7 +68,43 @@ def provide_converter() -> MarkItDown:
     """Provide MarkItDown converter instance as singleton"""
     settings = get_settings()
     session = create_requests_session(settings)
-    return MarkItDown(requests_session=session)
+
+    # Configure LLM client for image descriptions if available
+    llm_client = None
+    llm_model = None
+
+    if settings.openai_api_key:
+        try:
+            from openai import OpenAI
+
+            llm_client = OpenAI(
+                api_key=settings.openai_api_key, base_url=settings.llm_provider_url
+            )
+            llm_model = settings.llm_model
+        except ImportError:
+            logging.warning(
+                "OpenAI client not available - image descriptions will be disabled"
+            )
+
+    # Configure Azure Document Intelligence if available
+    docintel_endpoint = settings.azure_doc_intel_endpoint
+    docintel_credential = None
+    if settings.azure_doc_intel_key and docintel_endpoint:
+        try:
+            from azure.core.credentials import AzureKeyCredential
+
+            docintel_credential = AzureKeyCredential(settings.azure_doc_intel_key)
+        except ImportError:
+            logging.warning("Azure Document Intelligence not available")
+            docintel_endpoint = None
+
+    return MarkItDown(
+        requests_session=session,
+        llm_client=llm_client,
+        llm_model=llm_model,
+        docintel_endpoint=docintel_endpoint,
+        docintel_credential=docintel_credential,
+    )
 
 
 def provide_settings() -> Settings:
