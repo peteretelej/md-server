@@ -8,12 +8,12 @@ from markitdown import MarkItDown, StreamInfo
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig
 
 from .core.config import Settings
-from .security import SSRFProtection
+from .security import URLValidator
 
 
 def validate_url(url: str) -> str:
-    """Validate and sanitize URL input with SSRF protection"""
-    return SSRFProtection.validate_url(url)
+    """Validate URL input for document conversion"""
+    return URLValidator.validate_url(url)
 
 
 class UrlConverter:

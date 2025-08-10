@@ -1,90 +1,19 @@
-import ipaddress
-import socket
 from urllib.parse import urlparse
 
 
-class SSRFProtection:
-    """SSRF protection for URL validation"""
-
-    # Private IP ranges to block
-    BLOCKED_IP_RANGES = [
-        ipaddress.ip_network("127.0.0.0/8"),  # Loopback
-        ipaddress.ip_network("10.0.0.0/8"),  # Private Class A
-        ipaddress.ip_network("172.16.0.0/12"),  # Private Class B
-        ipaddress.ip_network("192.168.0.0/16"),  # Private Class C
-        ipaddress.ip_network("169.254.0.0/16"),  # Link-local
-        ipaddress.ip_network("::1/128"),  # IPv6 loopback
-        ipaddress.ip_network("fc00::/7"),  # IPv6 unique local
-        ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
-    ]
-
-    # Known metadata endpoints to block
-    BLOCKED_HOSTS = {
-        "169.254.169.254",  # AWS/Azure/GCP metadata
-        "metadata.google.internal",  # Google Cloud metadata
-        "169.254.169.123",  # DigitalOcean metadata
-        "100.100.100.200",  # Alibaba Cloud metadata
-        "169.254.169.253",  # OpenStack metadata
-    }
-
-    # Blocked schemes
-    BLOCKED_SCHEMES = {"file", "ftp", "gopher", "ldap", "dict", "javascript"}
+class URLValidator:
+    """Basic URL validation for document conversion"""
 
     @classmethod
     def validate_url(cls, url: str) -> str:
-        """Validate URL against SSRF attacks"""
+        """Validate URL format for document conversion"""
         parsed = urlparse(url.strip())
 
         if not parsed.scheme or not parsed.netloc:
             raise ValueError("Invalid URL format")
 
-        # Check scheme
-        if parsed.scheme.lower() in cls.BLOCKED_SCHEMES:
-            raise ValueError(f"Blocked URL scheme: {parsed.scheme}")
-
         if parsed.scheme.lower() not in ["http", "https"]:
             raise ValueError("Only HTTP/HTTPS URLs allowed")
-
-        # Extract hostname and port
-        hostname = parsed.hostname
-        if not hostname:
-            raise ValueError("Invalid hostname in URL")
-
-        # Check for blocked hostnames
-        if hostname.lower() in cls.BLOCKED_HOSTS:
-            raise ValueError(f"Access to {hostname} is not allowed")
-
-        # Resolve hostname to IP and check against blocked ranges
-        try:
-            # Get all IP addresses for the hostname
-            addr_info = socket.getaddrinfo(hostname, None)
-            ips = {info[4][0] for info in addr_info}
-
-            for ip_str in ips:
-                try:
-                    ip = ipaddress.ip_address(ip_str)
-                    for blocked_range in cls.BLOCKED_IP_RANGES:
-                        if ip in blocked_range:
-                            raise ValueError(
-                                f"Access to private/local IP address {ip} is not allowed"
-                            )
-                except ipaddress.AddressValueError:
-                    # Skip invalid IP addresses
-                    continue
-
-        except socket.gaierror as e:
-            raise ValueError(f"Cannot resolve hostname {hostname}: {e}")
-
-        # Additional hostname-based checks
-        hostname_lower = hostname.lower()
-
-        # Block localhost variants
-        if hostname_lower in {"localhost", "0.0.0.0"}:
-            raise ValueError("Access to localhost is not allowed")
-
-        # Block .local domains (multicast DNS)
-        if hostname_lower.endswith(".local"):
-            raise ValueError("Access to .local domains is not allowed")
 
         return url
 
