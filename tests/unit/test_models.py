@@ -1,6 +1,4 @@
 import pytest
-import uuid
-from typing import Dict, Any
 from md_server.models import (
     ConversionOptions,
     ConvertRequest,
@@ -19,7 +17,7 @@ class TestConversionOptions:
     def test_default_values(self):
         """Test default values for ConversionOptions"""
         options = ConversionOptions()
-        
+
         assert options.js_rendering is None
         assert options.timeout is None
         assert options.extract_images is False
@@ -39,7 +37,7 @@ class TestConversionOptions:
             max_length=1000,
             clean_markdown=True,
         )
-        
+
         assert options.js_rendering is True
         assert options.timeout == 30
         assert options.extract_images is True
@@ -53,7 +51,7 @@ class TestConvertRequest:
     def test_valid_url_request(self):
         """Test valid request with URL"""
         request = ConvertRequest(url="https://example.com")
-        
+
         assert request.url == "https://example.com"
         assert request.content is None
         assert request.text is None
@@ -61,7 +59,7 @@ class TestConvertRequest:
     def test_valid_content_request(self):
         """Test valid request with content"""
         request = ConvertRequest(content="base64content", filename="test.pdf")
-        
+
         assert request.content == "base64content"
         assert request.filename == "test.pdf"
         assert request.url is None
@@ -70,26 +68,30 @@ class TestConvertRequest:
     def test_valid_text_request(self):
         """Test valid request with text"""
         request = ConvertRequest(text="plain text content")
-        
+
         assert request.text == "plain text content"
         assert request.url is None
         assert request.content is None
 
     def test_no_input_provided(self):
         """Test validation error when no input is provided"""
-        with pytest.raises(ValueError, match="One of url, content, or text must be provided"):
+        with pytest.raises(
+            ValueError, match="One of url, content, or text must be provided"
+        ):
             ConvertRequest()
 
     def test_multiple_inputs_provided(self):
         """Test validation error when multiple inputs are provided"""
-        with pytest.raises(ValueError, match="Only one of url, content, or text can be provided"):
+        with pytest.raises(
+            ValueError, match="Only one of url, content, or text can be provided"
+        ):
             ConvertRequest(url="https://example.com", text="content")
 
     def test_with_options(self):
         """Test request with options"""
         options = ConversionOptions(js_rendering=True)
         request = ConvertRequest(url="https://example.com", options=options)
-        
+
         assert request.options == options
         assert request.options.js_rendering is True
 
@@ -98,9 +100,9 @@ class TestConvertRequest:
         request = ConvertRequest(
             content="base64content",
             filename="test.doc",
-            source_format="application/pdf"
+            source_format="application/pdf",
         )
-        
+
         assert request.source_format == "application/pdf"
 
 
@@ -115,7 +117,7 @@ class TestConversionMetadata:
             detected_format="application/pdf",
             warnings=["Warning 1", "Warning 2"],
         )
-        
+
         assert metadata.source_type == "pdf"
         assert metadata.source_size == 1024
         assert metadata.markdown_size == 2048
@@ -132,7 +134,7 @@ class TestConversionMetadata:
             conversion_time_ms=75,
             detected_format="text/html",
         )
-        
+
         assert metadata.warnings == []
 
 
@@ -146,14 +148,14 @@ class TestConvertResponse:
             conversion_time_ms=150,
             detected_format="application/pdf",
         )
-        
+
         response = ConvertResponse(
             success=True,
             markdown="# Test Content",
             metadata=metadata,
             request_id="test-123",
         )
-        
+
         assert response.success is True
         assert response.markdown == "# Test Content"
         assert response.metadata == metadata
@@ -169,7 +171,7 @@ class TestConvertResponse:
             detected_format="application/pdf",
             warnings=["Warning 1"],
         )
-        
+
         assert response.success is True
         assert response.markdown == "# Test Content"
         assert response.metadata.source_type == "pdf"
@@ -189,7 +191,7 @@ class TestConvertResponse:
             conversion_time_ms=75,
             detected_format="text/html",
         )
-        
+
         assert response.metadata.warnings == []
 
 
@@ -201,7 +203,7 @@ class TestErrorDetails:
             supported_formats=["pdf", "docx", "html"],
             magic_bytes="89504e47",
         )
-        
+
         assert details.detected_format == "unknown/binary"
         assert details.supported_formats == ["pdf", "docx", "html"]
         assert details.magic_bytes == "89504e47"
@@ -209,7 +211,7 @@ class TestErrorDetails:
     def test_error_details_defaults(self):
         """Test error details with default None values"""
         details = ErrorDetails()
-        
+
         assert details.detected_format is None
         assert details.supported_formats is None
         assert details.magic_bytes is None
@@ -224,7 +226,7 @@ class TestConvertError:
             details={"format": "unknown"},
             suggestions=["Try a different format"],
         )
-        
+
         assert error.code == "UNSUPPORTED_FORMAT"
         assert error.message == "File format not supported"
         assert error.details == {"format": "unknown"}
@@ -236,7 +238,7 @@ class TestConvertError:
             code="INVALID_INPUT",
             message="Invalid input provided",
         )
-        
+
         assert error.code == "INVALID_INPUT"
         assert error.message == "Invalid input provided"
         assert error.details is None
@@ -250,12 +252,12 @@ class TestErrorResponse:
             code="TEST_ERROR",
             message="Test error message",
         )
-        
+
         response = ErrorResponse(
             error=error,
             request_id="error-123",
         )
-        
+
         assert response.success is False
         assert response.error == error
         assert response.request_id == "error-123"
@@ -268,7 +270,7 @@ class TestErrorResponse:
             details={"field": "url"},
             suggestions=["Check URL format"],
         )
-        
+
         assert response.success is False
         assert response.error.code == "VALIDATION_ERROR"
         assert response.error.message == "Input validation failed"
@@ -282,7 +284,7 @@ class TestErrorResponse:
             code="GENERIC_ERROR",
             message="Something went wrong",
         )
-        
+
         assert response.error.details is None
         assert response.error.suggestions is None
 
@@ -296,7 +298,7 @@ class TestFormatCapabilities:
             features=["text_extraction", "metadata"],
             max_size_mb=50,
         )
-        
+
         assert capabilities.mime_types == ["application/pdf", "application/x-pdf"]
         assert capabilities.extensions == [".pdf"]
         assert capabilities.features == ["text_extraction", "metadata"]
@@ -312,11 +314,9 @@ class TestFormatsResponse:
             features=["text_extraction"],
             max_size_mb=50,
         )
-        
-        response = FormatsResponse(
-            formats={"pdf": pdf_caps}
-        )
-        
+
+        response = FormatsResponse(formats={"pdf": pdf_caps})
+
         assert "pdf" in response.formats
         assert response.formats["pdf"] == pdf_caps
 
@@ -330,7 +330,7 @@ class TestHealthResponse:
             uptime_seconds=3600,
             conversions_last_hour=42,
         )
-        
+
         assert response.status == "healthy"
         assert response.version == "1.0.0"
         assert response.uptime_seconds == 3600
@@ -343,5 +343,5 @@ class TestHealthResponse:
             version="1.0.0",
             uptime_seconds=3600,
         )
-        
+
         assert response.conversions_last_hour == 0

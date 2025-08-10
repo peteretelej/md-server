@@ -22,9 +22,9 @@ class TestURLValidator:
             "http://127.0.0.1/path",
             "https://192.168.1.100/internal-docs",
             "http://10.0.0.5/wiki",
-            "https://test.local/share"
+            "https://test.local/share",
         ]
-        
+
         for url in urls:
             result = URLValidator.validate_url(url)
             assert result == url
@@ -51,7 +51,7 @@ class TestURLValidator:
             "redis://example.com",
             "ldap://example.com/query",
         ]
-        
+
         for url in invalid_schemes:
             with pytest.raises(ValueError, match="Only HTTP/HTTPS URLs allowed"):
                 URLValidator.validate_url(url)
@@ -62,7 +62,7 @@ class TestURLValidator:
             "file:///etc/passwd",  # No netloc
             "javascript:alert('xss')",  # No netloc
         ]
-        
+
         for url in invalid_format_urls:
             with pytest.raises(ValueError, match="Invalid URL format"):
                 URLValidator.validate_url(url)
@@ -76,7 +76,7 @@ class TestURLValidator:
         """Test case insensitive scheme checking"""
         result = URLValidator.validate_url("HTTPS://example.com/test")
         assert result == "HTTPS://example.com/test"
-        
+
         result = URLValidator.validate_url("HTTP://example.com/test")
         assert result == "HTTP://example.com/test"
 
@@ -87,9 +87,9 @@ class TestURLValidator:
             "http://user:pass@example.com/secure",
             "https://sub.domain.example.com/nested/path",
             "http://192.168.1.100:3000/api/docs",
-            "https://[::1]:8080/ipv6-localhost"
+            "https://[::1]:8080/ipv6-localhost",
         ]
-        
+
         for url in complex_urls:
             result = URLValidator.validate_url(url)
             assert result == url
@@ -110,7 +110,9 @@ class TestFileSizeValidator:
 
     def test_valid_size_specific_format(self):
         """Test valid size for specific format"""
-        FileSizeValidator.validate_size(5 * 1024 * 1024, "application/pdf")  # 5MB PDF - should pass
+        FileSizeValidator.validate_size(
+            5 * 1024 * 1024, "application/pdf"
+        )  # 5MB PDF - should pass
 
     def test_exceeds_default_limit(self):
         """Test size exceeding default limit"""
@@ -122,7 +124,10 @@ class TestFileSizeValidator:
         """Test size exceeding format-specific limit"""
         size = 30 * 1024 * 1024  # 30MB
         with pytest.raises(ValueError, match="exceeds limit of 25MB"):
-            FileSizeValidator.validate_size(size, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            FileSizeValidator.validate_size(
+                size,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
 
     def test_various_format_limits(self):
         """Test various format-specific limits"""
@@ -133,11 +138,11 @@ class TestFileSizeValidator:
             ("image/png", 20 * 1024 * 1024),
             ("image/jpeg", 20 * 1024 * 1024),
         ]
-        
+
         for content_type, max_size in test_cases:
             # Should pass at limit
             FileSizeValidator.validate_size(max_size, content_type)
-            
+
             # Should fail above limit
             with pytest.raises(ValueError, match="exceeds limit"):
                 FileSizeValidator.validate_size(max_size + 1, content_type)
@@ -173,7 +178,7 @@ class TestContentValidator:
             b"\x50\x4b\x05\x06",  # Empty ZIP
             b"\x50\x4b\x07\x08",  # ZIP variant
         ]
-        
+
         for zip_content in zip_variants:
             result = ContentValidator.detect_content_type(zip_content)
             assert result == "application/zip"
@@ -185,7 +190,7 @@ class TestContentValidator:
             (b"\xff\xd8\xff", "image/jpeg"),
             (b"\x47\x49\x46\x38", "image/gif"),
         ]
-        
+
         for content, expected in image_tests:
             result = ContentValidator.detect_content_type(content)
             assert result == expected
@@ -196,7 +201,7 @@ class TestContentValidator:
             (b"\x3c\x68\x74\x6d\x6c", "text/html"),  # <html
             (b"\x3c\x21\x44\x4f\x43\x54\x59\x50\x45", "text/html"),  # <!DOCTYPE
         ]
-        
+
         for content, expected in html_variants:
             result = ContentValidator.detect_content_type(content)
             assert result == expected
@@ -214,7 +219,7 @@ class TestContentValidator:
             (b"\x49\x44\x33", "audio/mp3"),
             (b"\xff\xfb", "audio/mp3"),
         ]
-        
+
         for content, expected in audio_tests:
             result = ContentValidator.detect_content_type(content)
             assert result == expected
@@ -251,7 +256,7 @@ class TestContentValidator:
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ]
-        
+
         for office_type in office_types:
             result = ContentValidator.validate_content_type(zip_content, office_type)
             assert result == office_type
@@ -265,7 +270,7 @@ class TestContentValidator:
     def test_security_sensitive_mismatch(self):
         """Test security-sensitive types reject mismatches"""
         png_content = b"\x89\x50\x4e\x47"
-        
+
         with pytest.raises(ValueError, match="Content type mismatch"):
             ContentValidator.validate_content_type(png_content, "application/pdf")
 
@@ -277,18 +282,25 @@ class TestContentValidator:
             (b"\x89\x50\x4e\x47", "image/png"),
             (b"\xff\xd8\xff", "image/jpeg"),
         ]
-        
+
         for content, content_type in sensitive_tests:
             # Should pass with correct type
             result = ContentValidator.validate_content_type(content, content_type)
             assert result == content_type
-            
+
             # Should fail with wrong sensitive type
             with pytest.raises(ValueError, match="Content type mismatch"):
-                ContentValidator.validate_content_type(content, "application/pdf" if content_type != "application/pdf" else "text/html")
+                ContentValidator.validate_content_type(
+                    content,
+                    "application/pdf"
+                    if content_type != "application/pdf"
+                    else "text/html",
+                )
 
     def test_non_security_sensitive_mismatch_allowed(self):
         """Test non-security-sensitive types allow mismatches"""
         text_content = "Hello, world!".encode("utf-8")
-        result = ContentValidator.validate_content_type(text_content, "application/custom")
+        result = ContentValidator.validate_content_type(
+            text_content, "application/custom"
+        )
         assert result == "application/custom"

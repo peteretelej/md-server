@@ -1,4 +1,3 @@
-import pytest
 import base64
 from md_server.detection import ContentTypeDetector
 
@@ -11,12 +10,16 @@ class TestContentTypeDetector:
 
     def test_detect_from_content_type_header_with_charset(self):
         """Test content type detection with charset parameter"""
-        result = ContentTypeDetector.detect_from_content_type_header("text/html; charset=utf-8")
+        result = ContentTypeDetector.detect_from_content_type_header(
+            "text/html; charset=utf-8"
+        )
         assert result == "text/html"
 
     def test_detect_from_content_type_header_with_whitespace(self):
         """Test content type detection with whitespace"""
-        result = ContentTypeDetector.detect_from_content_type_header("  application/json  ; charset=utf-8")
+        result = ContentTypeDetector.detect_from_content_type_header(
+            "  application/json  ; charset=utf-8"
+        )
         assert result == "application/json"
 
     def test_detect_from_content_type_header_none(self):
@@ -38,12 +41,15 @@ class TestContentTypeDetector:
         """Test filename detection with valid extensions"""
         test_cases = [
             ("document.pdf", "application/pdf"),
-            ("document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            (
+                "document.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
             ("image.png", "image/png"),
             ("data.json", "application/json"),
             ("page.html", "text/html"),
         ]
-        
+
         for filename, expected in test_cases:
             result = ContentTypeDetector.detect_from_filename(filename)
             assert result == expected
@@ -88,7 +94,7 @@ class TestContentTypeDetector:
             (b"GIF87a", "image/gif"),
             (b"GIF89a", "image/gif"),
         ]
-        
+
         for content, expected in test_cases:
             result = ContentTypeDetector.detect_from_magic_bytes(content)
             assert result == expected
@@ -100,7 +106,7 @@ class TestContentTypeDetector:
             (b"ID3", "audio/mpeg"),
             (b"\x00\x00\x00 ftypmp4", "video/mp4"),
         ]
-        
+
         for content, expected in test_cases:
             result = ContentTypeDetector.detect_from_magic_bytes(content)
             assert result == expected
@@ -112,7 +118,7 @@ class TestContentTypeDetector:
             (b"<!DOCTYPE html>", "text/html"),
             (b"<?xml version='1.0'?>", "text/xml"),
         ]
-        
+
         for content, expected in test_cases:
             result = ContentTypeDetector.detect_from_magic_bytes(content)
             assert result == expected
@@ -123,7 +129,7 @@ class TestContentTypeDetector:
             (b'{"key": "value"}', "application/json"),
             (b'[{"item": 1}]', "application/json"),
         ]
-        
+
         for content, expected in test_cases:
             result = ContentTypeDetector.detect_from_magic_bytes(content)
             assert result == expected
@@ -155,12 +161,12 @@ class TestContentTypeDetector:
         # Test markdown detection based on actual logic
         test_cases = [
             (b"# Heading 1", "text/markdown"),
-            (b"## Heading 2", "text/markdown"), 
+            (b"## Heading 2", "text/markdown"),
             (b"* List item", "text/markdown"),
             (b"  # Heading with spaces", "text/markdown"),
             (b"  * List with spaces", "text/markdown"),
         ]
-        
+
         for content, expected in test_cases:
             result = ContentTypeDetector.detect_from_magic_bytes(content)
             assert result == expected
@@ -186,46 +192,56 @@ class TestContentTypeDetector:
     def test_detect_input_type_json_url(self):
         """Test input type detection for JSON URL request"""
         request_data = {"url": "https://example.com"}
-        input_type, format_type = ContentTypeDetector.detect_input_type(request_data=request_data)
-        
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
         assert input_type == "json_url"
         assert format_type == "text/url"
 
     def test_detect_input_type_json_content_with_base64(self):
         """Test input type detection for JSON content with valid base64"""
         pdf_content = b"%PDF-1.4"
-        b64_content = base64.b64encode(pdf_content).decode('utf-8')
+        b64_content = base64.b64encode(pdf_content).decode("utf-8")
         request_data = {"content": b64_content}
-        
-        input_type, format_type = ContentTypeDetector.detect_input_type(request_data=request_data)
-        
+
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
         assert input_type == "json_content"
         assert format_type == "application/pdf"
 
     def test_detect_input_type_json_content_invalid_base64(self):
         """Test input type detection for JSON content with invalid base64"""
         request_data = {"content": "invalid-base64!", "filename": "test.pdf"}
-        
-        input_type, format_type = ContentTypeDetector.detect_input_type(request_data=request_data)
-        
+
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
         assert input_type == "json_content"
         assert format_type == "application/pdf"
 
     def test_detect_input_type_json_content_no_filename(self):
         """Test input type detection for JSON content without filename"""
         request_data = {"content": "invalid-base64!"}
-        
-        input_type, format_type = ContentTypeDetector.detect_input_type(request_data=request_data)
-        
+
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
         assert input_type == "json_content"
         assert format_type == "application/octet-stream"
 
     def test_detect_input_type_json_text(self):
         """Test input type detection for JSON text request"""
         request_data = {"text": "Some plain text content"}
-        
-        input_type, format_type = ContentTypeDetector.detect_input_type(request_data=request_data)
-        
+
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
         assert input_type == "json_text"
         assert format_type == "text/plain"
 
@@ -233,20 +249,20 @@ class TestContentTypeDetector:
         """Test input type detection for multipart upload"""
         content = b"%PDF-1.4"
         filename = "document.pdf"
-        
+
         input_type, format_type = ContentTypeDetector.detect_input_type(
             content=content, filename=filename
         )
-        
+
         assert input_type == "multipart"
         assert format_type == "application/pdf"
 
     def test_detect_input_type_binary(self):
         """Test input type detection for binary upload"""
         content = b"%PDF-1.4"
-        
+
         input_type, format_type = ContentTypeDetector.detect_input_type(content=content)
-        
+
         assert input_type == "binary"
         assert format_type == "application/pdf"
 
@@ -255,11 +271,11 @@ class TestContentTypeDetector:
         content = b"%PDF-1.4"
         content_type = "text/plain"
         filename = "document.pdf"
-        
+
         input_type, format_type = ContentTypeDetector.detect_input_type(
             content_type=content_type, filename=filename, content=content
         )
-        
+
         assert input_type == "multipart"
         assert format_type == "text/plain"
 
@@ -267,11 +283,11 @@ class TestContentTypeDetector:
         """Test filename detection takes priority over magic bytes"""
         content = b"Some text content"  # Would normally be text/plain
         filename = "document.pdf"
-        
+
         input_type, format_type = ContentTypeDetector.detect_input_type(
             filename=filename, content=content
         )
-        
+
         assert input_type == "multipart"
         assert format_type == "application/pdf"
 
@@ -279,9 +295,9 @@ class TestContentTypeDetector:
         """Test fallback behavior with binary content"""
         # Use content that will actually fail UTF-8 decode
         content = b"\xff\xfe\xfd\xfc"
-        
+
         input_type, format_type = ContentTypeDetector.detect_input_type(content=content)
-        
+
         assert input_type == "binary"
         # Binary content that can't be decoded falls through magic bytes detection and returns None,
         # which gets caught by the "or" chain and defaults to "application/octet-stream"
@@ -290,7 +306,7 @@ class TestContentTypeDetector:
     def test_detect_input_type_unknown(self):
         """Test unknown input type"""
         input_type, format_type = ContentTypeDetector.detect_input_type()
-        
+
         assert input_type == "unknown"
         assert format_type == "application/octet-stream"
 
@@ -298,9 +314,18 @@ class TestContentTypeDetector:
         """Test source type mapping for known MIME types"""
         test_cases = [
             ("application/pdf", "pdf"),
-            ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"),
-            ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
-            ("application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"),
+            (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "docx",
+            ),
+            (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "xlsx",
+            ),
+            (
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "pptx",
+            ),
             ("text/html", "html"),
             ("text/plain", "text"),
             ("text/markdown", "markdown"),
@@ -313,7 +338,7 @@ class TestContentTypeDetector:
             ("audio/wav", "audio"),
             ("video/mp4", "video"),
         ]
-        
+
         for mime_type, expected in test_cases:
             result = ContentTypeDetector.get_source_type(mime_type)
             assert result == expected
@@ -341,7 +366,7 @@ class TestContentTypeDetector:
             "text/xml",
             "application/xml",
         ]
-        
+
         for format_type in supported_formats:
             assert ContentTypeDetector.is_supported_format(format_type) is True
 
@@ -353,26 +378,37 @@ class TestContentTypeDetector:
             "audio/mpeg",
             "image/bmp",
         ]
-        
+
         for format_type in unsupported_formats:
             assert ContentTypeDetector.is_supported_format(format_type) is False
 
     def test_get_supported_formats_structure(self):
         """Test supported formats structure"""
         formats = ContentTypeDetector.get_supported_formats()
-        
+
         # Check that key format types exist
-        required_formats = ["pdf", "docx", "xlsx", "pptx", "html", "markdown", "text", "json", "xml", "images"]
+        required_formats = [
+            "pdf",
+            "docx",
+            "xlsx",
+            "pptx",
+            "html",
+            "markdown",
+            "text",
+            "json",
+            "xml",
+            "images",
+        ]
         for format_name in required_formats:
             assert format_name in formats
-        
+
         # Check structure of one format
         pdf_format = formats["pdf"]
         assert "mime_types" in pdf_format
         assert "extensions" in pdf_format
         assert "features" in pdf_format
         assert "max_size_mb" in pdf_format
-        
+
         assert isinstance(pdf_format["mime_types"], list)
         assert isinstance(pdf_format["extensions"], list)
         assert isinstance(pdf_format["features"], list)
@@ -381,14 +417,14 @@ class TestContentTypeDetector:
     def test_get_supported_formats_specific_values(self):
         """Test specific values in supported formats"""
         formats = ContentTypeDetector.get_supported_formats()
-        
+
         # Test PDF format
         pdf_format = formats["pdf"]
         assert "application/pdf" in pdf_format["mime_types"]
         assert ".pdf" in pdf_format["extensions"]
         assert "ocr" in pdf_format["features"]
         assert pdf_format["max_size_mb"] == 50
-        
+
         # Test HTML format
         html_format = formats["html"]
         assert "text/html" in html_format["mime_types"]
