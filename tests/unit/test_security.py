@@ -1,5 +1,5 @@
 import pytest
-from md_server.security import URLValidator, FileSizeValidator, ContentValidator
+from md_server.security import URLValidator, FileSizeValidator, ContentValidator, MimeTypeValidator
 
 
 class TestURLValidator:
@@ -304,3 +304,68 @@ class TestContentValidator:
             text_content, "application/custom"
         )
         assert result == "application/custom"
+
+
+class TestMimeTypeValidator:
+    def test_valid_mime_type(self):
+        """Test valid MIME type passes validation"""
+        result = MimeTypeValidator.validate_mime_type("text/html")
+        assert result == "text/html"
+
+    def test_valid_mime_type_with_spaces(self):
+        """Test MIME type with spaces is stripped"""
+        result = MimeTypeValidator.validate_mime_type("  text/html  ")
+        assert result == "text/html"
+
+    def test_valid_mime_type_case_normalized(self):
+        """Test MIME type is normalized to lowercase"""
+        result = MimeTypeValidator.validate_mime_type("TEXT/HTML")
+        assert result == "text/html"
+
+    def test_empty_mime_type(self):
+        """Test empty MIME type raises ValueError"""
+        with pytest.raises(ValueError, match="MIME type cannot be empty"):
+            MimeTypeValidator.validate_mime_type("")
+
+    def test_none_mime_type(self):
+        """Test None MIME type raises ValueError"""
+        with pytest.raises(ValueError, match="MIME type cannot be empty"):
+            MimeTypeValidator.validate_mime_type(None)
+
+    def test_too_long_mime_type(self):
+        """Test MIME type over 100 chars raises ValueError"""
+        long_mime_type = "a" * 50 + "/" + "b" * 51  # 102 chars total
+        with pytest.raises(ValueError, match="MIME type too long"):
+            MimeTypeValidator.validate_mime_type(long_mime_type)
+
+    def test_mime_type_without_slash(self):
+        """Test MIME type without slash raises ValueError"""
+        with pytest.raises(ValueError, match="MIME type must contain '/' separator"):
+            MimeTypeValidator.validate_mime_type("texthtml")
+
+    def test_mime_type_with_double_dots(self):
+        """Test MIME type with .. raises ValueError"""
+        with pytest.raises(ValueError, match="Invalid characters in MIME type"):
+            MimeTypeValidator.validate_mime_type("text/../html")
+
+    def test_mime_type_with_backslash(self):
+        """Test MIME type with backslash raises ValueError"""
+        with pytest.raises(ValueError, match="Invalid characters in MIME type"):
+            MimeTypeValidator.validate_mime_type("text/ht\\ml")
+
+    def test_various_valid_mime_types(self):
+        """Test various valid MIME types"""
+        valid_types = [
+            "text/html",
+            "application/json",
+            "text/xml",
+            "application/xml",
+            "text/plain",
+            "text/markdown",
+            "application/xhtml+xml",
+            "text/csv",
+        ]
+
+        for mime_type in valid_types:
+            result = MimeTypeValidator.validate_mime_type(mime_type)
+            assert result == mime_type.lower()
