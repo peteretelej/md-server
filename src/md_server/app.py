@@ -10,7 +10,8 @@ from markitdown import MarkItDown
 from .core.config import get_settings, Settings
 from .controllers import ConvertController
 from .middleware.auth import create_auth_middleware
-from .converter import UrlConverter, check_browser_availability
+from .converter import UrlConverter
+from .browser import BrowserChecker
 from .models import HealthResponse, FormatsResponse
 from .detection import ContentTypeDetector
 
@@ -124,18 +125,9 @@ async def startup_browser_detection():
     logging.basicConfig(level=logging.INFO)
 
     try:
-        browser_available = await check_browser_availability()
+        browser_available = await BrowserChecker.is_available()
         provide_url_converter._browser_available = browser_available
-
-        if browser_available:
-            logging.info(
-                "URL Conversion: Using Crawl4AI with Playwright browsers (JavaScript support enabled)"
-            )
-        else:
-            logging.warning(
-                "WARNING: URL Conversion: Playwright browsers not available, using MarkItDown for basic URL conversions. Install Playwright for Crawl4AI with Javascript support. Please see https://github.com/peteretelej/md-server?tab=readme-ov-file#enhanced-url-conversion-optional"
-            )
-
+        BrowserChecker.log_availability(browser_available)
     except Exception as e:
         logging.error(f"Startup browser detection failed: {e}")
         provide_url_converter._browser_available = False

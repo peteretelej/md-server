@@ -11,29 +11,6 @@ from .core.config import Settings
 from .security import SSRFProtection
 
 
-async def check_browser_availability() -> bool:
-    """Check if Playwright browsers are available at startup"""
-    try:
-        browser_config = BrowserConfig(
-            browser_type="chromium",
-            headless=True,
-            verbose=False,
-        )
-
-        # Quick test to see if browser can initialize
-        async with AsyncWebCrawler(config=browser_config):
-            # Don't actually crawl anything, just test initialization
-            pass
-        return True
-    except Exception as e:
-        error_str = str(e)
-        if any(
-            keyword in error_str.lower()
-            for keyword in ["playwright", "browser", "executable", "chromium"]
-        ):
-            return False
-        # Re-raise unexpected errors
-        raise
 
 
 def validate_url(url: str) -> str:
