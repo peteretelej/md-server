@@ -83,7 +83,7 @@ ln -sf ./scripts/pre-push .git/hooks/pre-push
 ### Coding Standards
 
 - Use type hints
-- Follow FastAPI patterns
+- Follow Litestar patterns
 - Use Pydantic models for validation
 - Prefer async/await for I/O
 - Self-documenting code
@@ -158,12 +158,13 @@ Follow [Semantic Versioning](https://semver.org/):
 ```
 src/md_server/
 ├── __main__.py         # CLI entry
-├── app.py              # FastAPI app
+├── app.py              # Litestar app
 ├── controllers.py      # API handlers
 ├── converter.py        # Conversion logic
 ├── models.py           # Pydantic models
-├── core/config.py      # Settings
-└── middleware/auth.py  # Auth middleware
+└── core/
+    ├── __init__.py
+    └── config.py       # Settings
 ```
 
 ## Debugging

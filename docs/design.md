@@ -1,109 +1,126 @@
-# md-server Design Document
-
-md-server is an HTTP server for converting documents and web content to markdown.
+# Design Document
 
 ## Overview
 
-The server provides a simple HTTP API for converting various document types (PDFs, Office documents, images, web pages) to markdown format. It uses Litestar as the web framework to handle HTTP requests and responses, while leveraging the MarkItDown library for the actual document conversion processing. The architecture supports both file uploads and URL-based content conversion through dedicated endpoints.
+HTTP server for converting documents to markdown. Uses Litestar framework with MarkItDown for conversion and optional Crawl4AI for web scraping.
 
 ## Architecture
 
 ### Entry Points
-- `src/md_server/__main__.py` - CLI entry with argument parsing (host, port)
-- `src/md_server/app.py` - Litestar application with dependency injection and route configuration
+- `src/md_server/__main__.py` - CLI entry
+- `src/md_server/app.py` - Litestar app configuration
 
 ### API Layer
-- `src/md_server/app.py` - Health check endpoint (`GET /healthz`)
-- `src/md_server/controllers.py` - Controller class with conversion endpoints:
-  - `POST /convert` - File upload conversion
-  - `POST /convert/url` - URL content conversion
-- `src/md_server/models.py` - Dataclass models for request/response
+- `src/md_server/controllers.py` - Request handlers
+  - `POST /convert` - Main conversion endpoint
+  - `GET /health` - Health check
+  - `GET /formats` - Supported formats
+- `src/md_server/models.py` - Pydantic models
 
-### Business Logic Layer
-- `src/md_server/converter.py` - Direct MarkItDown integration with async executors
+### Business Logic
+- `src/md_server/converter.py` - Conversion orchestration
+  - MarkItDown integration
+  - Crawl4AI integration (when available)
+  - Input type detection
 
-### Configuration Layer
-- `src/md_server/core/config.py` - Service settings (file size limits, timeouts, debug mode)
+### Configuration
+- `src/md_server/core/config.py` - Settings management
 
 ## Data Flow
 
-### File Conversion Flow
 ```
-POST /convert → ConvertController.convert_file → convert_content → MarkItDown → markdown response
-```
-
-1. API receives multipart file upload
-2. Controller validates and processes file content
-3. Converter uses async executor to process content with MarkItDown
-4. Response returns markdown or error
-
-### URL Conversion Flow
-```
-POST /convert/url → ConvertController.convert_url_endpoint → convert_url → MarkItDown → markdown response
+Request → Controller → Input Detection → Converter → Response
 ```
 
-1. API receives URL in JSON payload
-2. Controller validates URL format
-3. Converter fetches and converts content via async executor
-4. Response returns markdown or error
+### Input Detection
 
-## Key Components
+1. Check Content-Type header
+2. For multipart: extract file
+3. For JSON: check fields (url, content, text)
+4. For binary: use magic bytes
+5. Apply options and convert
 
-### Dependency Injection
-- MarkItDown converter instances injected as singletons
-- Settings injected via Litestar's dependency system
-- Clean separation of concerns and testability
+## Request/Response
+
+### Request Format
+```json
+{
+  "url": "string",
+  "content": "string",      // base64
+  "text": "string",
+  "filename": "string",
+  "options": {}
+}
+```
+
+### Response Format
+```json
+{
+  "success": true,
+  "markdown": "...",
+  "metadata": {},
+  "request_id": "req_..."
+}
+```
+
+### Error Format
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "...",
+    "details": {}
+  },
+  "request_id": "req_..."
+}
+```
+
+## Technical Details
 
 ### Async Processing
-- `asyncio.run_in_executor()` for sync MarkItDown operations
+- `asyncio.run_in_executor()` for sync libraries
 - Non-blocking request handling
-- Configurable timeouts with `asyncio.wait_for()`
+- Configurable timeouts
 
-### Error Handling
-- Litestar HTTPException for structured error responses
-- Timeout protection on all conversions
-- Proper error classification and status codes
+### Dependency Injection
+- Singleton converters via Litestar DI
+- Settings injection
+- Clean testability
 
-## Performance Considerations
-
-- Async processing prevents blocking
-- Singleton MarkItDown instances reduce initialization overhead
-- Memory-efficient file processing
-- Configurable timeouts and limits
-
-## Security Features
-
-- File type validation through MarkItDown
-- File size limits via configuration
-- URL validation and sanitization
-- Environment-based configuration management
-- In-memory processing without temporary files
+### Security
+- SSRF protection (blocked IPs)
+- Magic bytes validation
+- Size limits per format
+- URL scheme validation
+- Path traversal prevention
 
 ## Project Structure
 
 ```
 src/md_server/
 ├── __init__.py
-├── __main__.py         # CLI entry point
-├── app.py             # Litestar app with DI configuration
-├── controllers.py     # Single controller with all endpoints
-├── converter.py       # Direct MarkItDown integration
-├── models.py          # Dataclass models
+├── __main__.py
+├── app.py
+├── controllers.py
+├── converter.py
+├── models.py
 └── core/
-    ├── __init__.py
-    └── config.py      # Settings and configuration
+    └── config.py
 ```
 
-## Configuration Management
+## Configuration
 
-- Environment-based settings with Pydantic validation
-- Debug mode configuration
-- File size and timeout limits
-- Singleton dependency injection for performance
+Environment variables:
+- `MD_SERVER_DEBUG` - Debug mode
+- `MD_SERVER_MAX_FILE_SIZE` - Max file size
+- `MD_SERVER_TIMEOUT_SECONDS` - Conversion timeout
+- `MD_SERVER_HOST` - Server host
+- `MD_SERVER_PORT` - Server port
 
 ## Testing
 
-- Simple test suite focused on API functionality
-- Litestar AsyncTestClient for endpoint testing
-- Essential test data preserved for comprehensive validation
-- Clean separation between unit and integration tests
+- Unit tests for converters
+- Integration tests for endpoints
+- Security validation tests
+- Performance benchmarks
