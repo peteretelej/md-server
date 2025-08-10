@@ -243,7 +243,43 @@ class TestContentTypeDetector:
         )
 
         assert input_type == "json_text"
-        assert format_type == "text/plain"
+        assert format_type == "text/markdown"
+
+    def test_detect_input_type_json_text_typed_html(self):
+        """Test input type detection for JSON text with HTML MIME type"""
+        request_data = {"text": "<h1>Hello World</h1>", "mime_type": "text/html"}
+
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
+        assert input_type == "json_text_typed"
+        assert format_type == "text/html"
+
+    def test_detect_input_type_json_text_typed_xml(self):
+        """Test input type detection for JSON text with XML MIME type"""
+        request_data = {
+            "text": "<root><item>test</item></root>",
+            "mime_type": "text/xml",
+        }
+
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
+        assert input_type == "json_text_typed"
+        assert format_type == "text/xml"
+
+    def test_detect_input_type_json_text_typed_custom(self):
+        """Test input type detection for JSON text with custom MIME type"""
+        request_data = {"text": "custom content", "mime_type": "application/custom"}
+
+        input_type, format_type = ContentTypeDetector.detect_input_type(
+            request_data=request_data
+        )
+
+        assert input_type == "json_text_typed"
+        assert format_type == "application/custom"
 
     def test_detect_input_type_multipart(self):
         """Test input type detection for multipart upload"""

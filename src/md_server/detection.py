@@ -105,7 +105,7 @@ class ContentTypeDetector:
 
         Returns:
             Tuple[input_type, format] where:
-            - input_type: 'binary', 'multipart', 'json_url', 'json_content', 'json_text'
+            - input_type: 'binary', 'multipart', 'json_url', 'json_content', 'json_text', 'json_text_typed'
             - format: detected MIME type or format
         """
 
@@ -131,7 +131,9 @@ class ContentTypeDetector:
 
                 return "json_content", "application/octet-stream"
             elif "text" in request_data:
-                return "json_text", "text/plain"
+                if "mime_type" in request_data:
+                    return "json_text_typed", request_data["mime_type"]
+                return "json_text", "text/markdown"
 
         # Binary upload detection
         if content and not request_data:

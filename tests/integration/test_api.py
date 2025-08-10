@@ -44,7 +44,7 @@ class TestConvertAPI:
         data = response.json()
         assert data["success"]
         assert len(data["markdown"]) > 0
-        assert data["metadata"]["source_type"] == "text"
+        assert data["metadata"]["source_type"] == "markdown"
         assert "conversion_time_ms" in data["metadata"]
 
     @pytest.mark.timeout(10)  # 10 second timeout
@@ -295,3 +295,93 @@ class TestConvertAPI:
         assert "conversion_time_ms" in data["metadata"]
         assert "detected_format" in data["metadata"]
         assert "warnings" in data["metadata"]
+
+    def test_convert_html_text_with_mime_type(self, client):
+        payload = {
+            "text": "<h1>Title</h1><p>Paragraph content</p>",
+            "mime_type": "text/html",
+        }
+
+        response = client.post("/convert", json=payload)
+
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data["success"]
+        assert "Title" in data["markdown"]
+        assert "Paragraph content" in data["markdown"]
+        assert data["metadata"]["source_type"] == "html"
+
+    def test_convert_xml_text_with_mime_type(self, client):
+        payload = {
+            "text": "<?xml version='1.0'?><root><item>Test content</item></root>",
+            "mime_type": "text/xml",
+        }
+
+        response = client.post("/convert", json=payload)
+
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data["success"]
+        assert len(data["markdown"]) > 0
+
+    def test_convert_markdown_text_with_mime_type(self, client):
+        payload = {
+            "text": "# Markdown Title\n\nSome **bold** text",
+            "mime_type": "text/markdown",
+        }
+
+        response = client.post("/convert", json=payload)
+
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data["success"]
+        assert data["markdown"] == "# Markdown Title\n\nSome **bold** text"
+        assert data["metadata"]["source_type"] == "markdown"
+
+    def test_convert_text_invalid_mime_type(self, client):
+        payload = {
+            "text": "<h1>Test</h1>",
+            "mime_type": "invalid/type/with/too/many/slashes",
+        }
+
+        response = client.post("/convert", json=payload)
+
+        assert response.status_code == HTTP_400_BAD_REQUEST
+        data = response.json()["detail"]
+        assert not data["success"]
+        assert data["error"]["code"] == "INVALID_INPUT"
+
+    def test_convert_text_malicious_mime_type(self, client):
+        payload = {"text": "<h1>Test</h1>", "mime_type": "text/html../../../etc/passwd"}
+
+        response = client.post("/convert", json=payload)
+
+        assert response.status_code == HTTP_400_BAD_REQUEST
+        data = response.json()["detail"]
+        assert not data["success"]
+        assert data["error"]["code"] == "INVALID_INPUT"
+
+    def test_convert_text_long_mime_type(self, client):
+        payload = {
+            "text": "<h1>Test</h1>",
+            "mime_type": "a" * 200,  # Exceeds 100 char limit
+        }
+
+        response = client.post("/convert", json=payload)
+
+        assert response.status_code == HTTP_400_BAD_REQUEST
+        data = response.json()["detail"]
+        assert not data["success"]
+        assert data["error"]["code"] == "INVALID_INPUT"
+
+    def test_convert_text_backward_compatibility(self, client):
+        # Test that text without mime_type still works as before
+        payload = {"text": "# Test markdown\n\nPlain text content"}
+
+        response = client.post("/convert", json=payload)
+
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data["success"]
+        assert data["markdown"] == "# Test markdown\n\nPlain text content"
+        assert data["metadata"]["source_type"] == "markdown"

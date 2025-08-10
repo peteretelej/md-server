@@ -132,3 +132,27 @@ class ContentValidator:
             )
 
         return declared_type
+
+
+class MimeTypeValidator:
+    """MIME type validation for text content"""
+
+    @classmethod
+    def validate_mime_type(cls, mime_type: str) -> str:
+        """Validate MIME type format and security"""
+        if not mime_type:
+            raise ValueError("MIME type cannot be empty")
+
+        if len(mime_type) > 100:
+            raise ValueError("MIME type too long (max 100 characters)")
+
+        if "/" not in mime_type:
+            raise ValueError("MIME type must contain '/' separator")
+
+        if mime_type.count("/") != 1:
+            raise ValueError("MIME type must contain exactly one '/' separator")
+
+        if ".." in mime_type or "\\" in mime_type:
+            raise ValueError("Invalid characters in MIME type")
+
+        return mime_type.strip().lower()

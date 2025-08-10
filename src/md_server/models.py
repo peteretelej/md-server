@@ -31,6 +31,9 @@ class ConvertRequest(BaseModel):
         default=None, description="Base64 encoded file content"
     )
     text: Optional[str] = Field(default=None, description="Raw text content")
+    mime_type: Optional[str] = Field(
+        default=None, description="MIME type for text content"
+    )
     filename: Optional[str] = Field(
         default=None, description="Original filename for format detection"
     )

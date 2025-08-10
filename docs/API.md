@@ -60,6 +60,20 @@ curl -X POST http://localhost:8080/convert \
   -d '{"text": "# Markdown content"}'
 ```
 
+##### JSON with Typed Text
+
+```bash
+# HTML text conversion
+curl -X POST http://localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"text": "<h1>Title</h1><p>Content</p>", "mime_type": "text/html"}'
+
+# XML text conversion  
+curl -X POST http://localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"text": "<?xml version=\"1.0\"?><root><item>Data</item></root>", "mime_type": "text/xml"}'
+```
+
 #### Request Schema
 
 ```json
@@ -67,6 +81,7 @@ curl -X POST http://localhost:8080/convert \
   "url": "string",
   "content": "string", // base64
   "text": "string",
+  "mime_type": "string", // optional, for text field
   "filename": "string",
   "source_format": "string",
   "options": {
@@ -170,6 +185,7 @@ curl http://localhost:8080/health
 | `UNSUPPORTED_FORMAT` | 400    | Format not supported  |
 | `FILE_TOO_LARGE`     | 413    | Exceeds size limit    |
 | `INVALID_URL`        | 400    | URL malformed/blocked |
+| `INVALID_INPUT`      | 400    | Invalid MIME type/input |
 | `FETCH_FAILED`       | 502    | URL fetch failed      |
 | `CONVERSION_FAILED`  | 500    | Conversion error      |
 | `RATE_LIMITED`       | 429    | Too many requests     |

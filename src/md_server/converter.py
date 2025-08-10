@@ -8,7 +8,7 @@ from markitdown import MarkItDown, StreamInfo
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig
 
 from .core.config import Settings
-from .security import URLValidator
+from .security import URLValidator, MimeTypeValidator
 
 
 def validate_url(url: str) -> str:
@@ -175,3 +175,53 @@ def _clean_markdown(markdown: str) -> str:
         cleaned_lines.pop()
 
     return "\n".join(cleaned_lines)
+
+
+async def convert_text_with_mime_type(
+    converter: MarkItDown,
+    text: str,
+    mime_type: str,
+    options: Optional[dict] = None,
+) -> str:
+    """Convert text with specified MIME type to markdown using MarkItDown"""
+    validated_mime_type = MimeTypeValidator.validate_mime_type(mime_type)
+
+    if validated_mime_type == "text/markdown":
+        return text
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None,
+        _sync_convert_text_with_mime_type,
+        converter,
+        text,
+        validated_mime_type,
+        options,
+    )
+
+
+def _sync_convert_text_with_mime_type(
+    converter: MarkItDown,
+    text: str,
+    mime_type: str,
+    options: Optional[dict] = None,
+) -> str:
+    """Synchronous text conversion with MIME type"""
+    text_bytes = text.encode("utf-8")
+    stream_info = StreamInfo(mimetype=mime_type)
+
+    kwargs = {}
+    if options:
+        pass
+
+    with BytesIO(text_bytes) as stream:
+        result = converter.convert_stream(stream, stream_info=stream_info, **kwargs)
+        markdown = result.markdown
+
+        if options:
+            if options.get("clean_markdown", False):
+                markdown = _clean_markdown(markdown)
+            if options.get("max_length") and len(markdown) > options["max_length"]:
+                markdown = markdown[: options["max_length"]] + "..."
+
+        return markdown
