@@ -37,8 +37,7 @@ class LLMClientFactory:
             from openai import OpenAI
 
             client = OpenAI(
-                api_key=settings.openai_api_key,
-                base_url=settings.llm_provider_url
+                api_key=settings.openai_api_key, base_url=settings.llm_provider_url
             )
             return client, settings.llm_model
         except ImportError:
@@ -71,7 +70,9 @@ class MarkItDownFactory:
         """Create MarkItDown instance with all configured services"""
         session = HTTPClientFactory.create_session(settings)
         llm_client, llm_model = LLMClientFactory.create_client(settings)
-        docintel_endpoint, docintel_credential = AzureDocIntelFactory.create_credential(settings)
+        docintel_endpoint, docintel_credential = AzureDocIntelFactory.create_credential(
+            settings
+        )
 
         return MarkItDown(
             requests_session=session,

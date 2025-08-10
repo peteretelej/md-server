@@ -11,8 +11,6 @@ from .core.config import Settings
 from .security import SSRFProtection
 
 
-
-
 def validate_url(url: str) -> str:
     """Validate and sanitize URL input with SSRF protection"""
     return SSRFProtection.validate_url(url)
@@ -21,7 +19,12 @@ def validate_url(url: str) -> str:
 class UrlConverter:
     """URL to markdown converter with Crawl4AI and MarkItDown fallback"""
 
-    def __init__(self, settings: Settings, browser_available: bool, markitdown_instance: MarkItDown):
+    def __init__(
+        self,
+        settings: Settings,
+        browser_available: bool,
+        markitdown_instance: MarkItDown,
+    ):
         self.settings = settings
         self.browser_available = browser_available
         self.markitdown_instance = markitdown_instance
