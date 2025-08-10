@@ -1,6 +1,18 @@
 import argparse
+import socket
+import sys
 import uvicorn
 from .app import app
+
+
+def is_port_available(host: str, port: int) -> bool:
+    """Check if a port is available for binding."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind((host, port))
+            return True
+    except OSError:
+        return False
 
 
 def main():
@@ -15,6 +27,15 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if not is_port_available(args.host, args.port):
+        print(f"Error: Port {args.port} is already in use on {args.host}")
+        print(
+            "  Try using a different port with --port <PORT_NUMBER> or the env variable MD_SERVER_PORT"
+        )
+        print(f"  Example: uvx md-server --port {args.port + 1}")
+        sys.exit(1)
+
     uvicorn.run(app, host=args.host, port=args.port)
 
 
