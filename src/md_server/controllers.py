@@ -19,7 +19,7 @@ from .models import (
     ErrorResponse,
     ConversionOptions,
 )
-from .converter import convert_content, UrlConverter
+from .converter import convert_content, UrlConverter, convert_text_with_mime_type
 from .core.config import Settings
 from .detection import ContentTypeDetector
 from .security import FileSizeValidator, ContentValidator
@@ -201,6 +201,15 @@ class ConvertController(Controller):
 
             return text
 
+        elif input_type == "json_text_typed":
+            # Convert text with specified MIME type
+            text = request_data["text"]
+            mime_type = request_data["mime_type"]
+
+            return await convert_text_with_mime_type(
+                converter, text, mime_type, options.model_dump() if options else None
+            )
+
         else:
             raise ValueError(f"Unsupported input type: {input_type}")
 
@@ -210,7 +219,7 @@ class ConvertController(Controller):
         """Calculate source content size"""
         if input_type == "json_url":
             return len(request_data.get("url", "").encode("utf-8"))
-        elif input_type == "json_text":
+        elif input_type in ["json_text", "json_text_typed"]:
             return len(request_data.get("text", "").encode("utf-8"))
         elif input_type == "json_content":
             return len(base64.b64decode(request_data.get("content", "")))

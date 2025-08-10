@@ -1,5 +1,10 @@
 import pytest
-from md_server.security import URLValidator, FileSizeValidator, ContentValidator, MimeTypeValidator
+from md_server.security import (
+    URLValidator,
+    FileSizeValidator,
+    ContentValidator,
+    MimeTypeValidator,
+)
 
 
 class TestURLValidator:
@@ -343,10 +348,17 @@ class TestMimeTypeValidator:
         with pytest.raises(ValueError, match="MIME type must contain '/' separator"):
             MimeTypeValidator.validate_mime_type("texthtml")
 
+    def test_mime_type_with_multiple_slashes(self):
+        """Test MIME type with multiple slashes raises ValueError"""
+        with pytest.raises(
+            ValueError, match="MIME type must contain exactly one '/' separator"
+        ):
+            MimeTypeValidator.validate_mime_type("text/html/extra")
+
     def test_mime_type_with_double_dots(self):
         """Test MIME type with .. raises ValueError"""
         with pytest.raises(ValueError, match="Invalid characters in MIME type"):
-            MimeTypeValidator.validate_mime_type("text/../html")
+            MimeTypeValidator.validate_mime_type("text/html..")
 
     def test_mime_type_with_backslash(self):
         """Test MIME type with backslash raises ValueError"""

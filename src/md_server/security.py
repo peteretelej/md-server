@@ -149,6 +149,9 @@ class MimeTypeValidator:
         if "/" not in mime_type:
             raise ValueError("MIME type must contain '/' separator")
 
+        if mime_type.count("/") != 1:
+            raise ValueError("MIME type must contain exactly one '/' separator")
+
         if ".." in mime_type or "\\" in mime_type:
             raise ValueError("Invalid characters in MIME type")
 

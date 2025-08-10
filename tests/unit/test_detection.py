@@ -258,7 +258,10 @@ class TestContentTypeDetector:
 
     def test_detect_input_type_json_text_typed_xml(self):
         """Test input type detection for JSON text with XML MIME type"""
-        request_data = {"text": "<root><item>test</item></root>", "mime_type": "text/xml"}
+        request_data = {
+            "text": "<root><item>test</item></root>",
+            "mime_type": "text/xml",
+        }
 
         input_type, format_type = ContentTypeDetector.detect_input_type(
             request_data=request_data
