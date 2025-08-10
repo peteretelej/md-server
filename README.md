@@ -24,6 +24,11 @@ curl -X POST localhost:8080/convert --data-binary @document.pdf
 curl -X POST localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com"}'
+
+# Convert HTML text
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"text": "<h1>Title</h1><p>Content</p>", "mime_type": "text/html"}'
 ```
 
 ## Installation
@@ -76,6 +81,11 @@ curl -X POST localhost:8080/convert \
 curl -X POST localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"text": "# Already Markdown\n\nBut might need cleaning"}'
+
+# Text with specific format (HTML, XML, etc.)
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"text": "<h1>HTML Title</h1><p>Convert HTML to markdown</p>", "mime_type": "text/html"}'
 ```
 
 #### Response Format
