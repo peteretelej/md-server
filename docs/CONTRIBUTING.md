@@ -127,10 +127,17 @@ uv add --dev package-name
 
 ## Docker
 
+The Docker image includes browser support for JavaScript rendering:
+
 ```bash
 docker build -t md-server .
 docker run -p 8080:8080 --env-file .env ghcr.io/peteretelej/md-server
 ```
+
+**Resource Requirements:**
+- Memory: 1GB recommended for browser operations
+- Build time: 5-10 minutes (includes Playwright browsers)
+- Image size: ~1.2GB
 
 ## Publishing New Version
 

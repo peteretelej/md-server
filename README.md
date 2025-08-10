@@ -36,11 +36,16 @@ uvx md-server
 
 ### Using Docker
 
-You can run on Docker using the [md-server docker image](https://github.com/peteretelej/md-server/pkgs/container/md-server)
+You can run on Docker using the [md-server docker image](https://github.com/peteretelej/md-server/pkgs/container/md-server). The Docker image includes full browser support for JavaScript rendering.
 
 ```bash
 docker run -p 127.0.0.1:8080:8080 ghcr.io/peteretelej/md-server
 ```
+
+**Resource Requirements:**
+- Memory: 1GB recommended (minimum 512MB)
+- Storage: ~1.2GB image size
+- Initial startup: 10-15 seconds (browser initialization)
 
 ## API
 
@@ -131,16 +136,18 @@ curl localhost:8080/health
 
 ## Advanced Usage
 
-### Enhanced URL Conversion (Optional)
+### Enhanced URL Conversion
 
-By default, md-server uses MarkItDown for URL conversion. To enable **Crawl4AI** for advanced web crawling with JavaScript rendering, install Playwright browsers:
+**Docker deployments** include full browser support automatically - JavaScript rendering is enabled out of the box.
+
+**Local installations** use MarkItDown for URL conversion by default. To enable **Crawl4AI** with JavaScript rendering:
 
 ```bash
 uvx playwright install-deps
 uvx playwright install chromium
 ```
 
-If Playwright browsers are available, md-server will use Crawl4AI automatically for URL conversions. It provides better handling of JavaScript-heavy sites, smart content extraction and cleaning, and many more features.
+When browsers are available, md-server automatically uses Crawl4AI for better handling of JavaScript-heavy sites, smart content extraction, and enhanced web crawling capabilities.
 
 ### Pipe from Other Commands
 
