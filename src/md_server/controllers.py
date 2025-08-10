@@ -24,6 +24,7 @@ from .models import (
 from .converter import convert_content, UrlConverter
 from .core.config import Settings
 from .detection import ContentTypeDetector
+from .security import FileSizeValidator, ContentValidator
 
 
 class ConvertController(Controller):
@@ -53,11 +54,10 @@ class ConvertController(Controller):
             if request_data and "options" in request_data:
                 options = ConversionOptions(**request_data["options"])
 
-            # Apply timeout from options or settings
-            timeout = options.timeout or settings.timeout_seconds
-
-            # Convert based on input type
+            # Apply appropriate timeout based on operation type
             if input_type == "json_url":
+                # URL operations use URL fetch timeout (typically shorter)
+                timeout = options.timeout or settings.url_fetch_timeout
                 url = request_data.get("url")
                 js_rendering = options.js_rendering
                 markdown = await asyncio.wait_for(
@@ -65,6 +65,8 @@ class ConvertController(Controller):
                     timeout=timeout,
                 )
             else:
+                # File conversions use conversion timeout (typically longer)
+                timeout = options.timeout or settings.conversion_timeout
                 markdown = await asyncio.wait_for(
                     self._convert_by_input_type(
                         input_type,
@@ -107,14 +109,45 @@ class ConvertController(Controller):
             )
 
         except ValueError as e:
-            error_response = ErrorResponse.create_error(
-                code="INVALID_INPUT",
-                message=str(e),
-                suggestions=["Check input format", "Verify JSON structure"],
-            )
-            raise HTTPException(
-                status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
-            )
+            error_msg = str(e)
+            
+            # Handle specific security-related errors
+            if "size" in error_msg.lower() and "exceeds" in error_msg.lower():
+                error_response = ErrorResponse.create_error(
+                    code="FILE_TOO_LARGE",
+                    message=error_msg,
+                    suggestions=["Use a smaller file", "Check size limits at /formats"],
+                )
+                raise HTTPException(
+                    status_code=413, detail=error_response.model_dump()  # 413 Payload Too Large
+                )
+            elif "not allowed" in error_msg.lower() or "blocked" in error_msg.lower():
+                error_response = ErrorResponse.create_error(
+                    code="INVALID_URL",
+                    message=error_msg,
+                    suggestions=["Use a public URL", "Avoid private IP addresses"],
+                )
+                raise HTTPException(
+                    status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
+                )
+            elif "content type mismatch" in error_msg.lower():
+                error_response = ErrorResponse.create_error(
+                    code="INVALID_CONTENT",
+                    message=error_msg,
+                    suggestions=["Ensure file matches declared content type"],
+                )
+                raise HTTPException(
+                    status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
+                )
+            else:
+                error_response = ErrorResponse.create_error(
+                    code="INVALID_INPUT",
+                    message=error_msg,
+                    suggestions=["Check input format", "Verify JSON structure"],
+                )
+                raise HTTPException(
+                    status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
+                )
 
         except Exception as e:
             error_msg = str(e)
@@ -164,8 +197,17 @@ class ConvertController(Controller):
 
                 file = form_data["file"]
                 content = await file.read()
+                
+                # Validate content type matches detected type
+                validated_type = ContentValidator.validate_content_type(
+                    content, file.content_type
+                )
+                
+                # Validate file size
+                FileSizeValidator.validate_size(len(content), validated_type)
+                
                 input_type, format_type = ContentTypeDetector.detect_input_type(
-                    content_type=file.content_type,
+                    content_type=validated_type,
                     filename=file.filename,
                     content=content,
                 )
@@ -176,6 +218,9 @@ class ConvertController(Controller):
                     None,
                 )
 
+            except ValueError:
+                # Re-raise ValueError for proper error handling
+                raise
             except Exception as e:
                 raise ValueError(f"Failed to process multipart upload: {str(e)}")
 
@@ -183,11 +228,23 @@ class ConvertController(Controller):
         else:
             try:
                 content = await request.body()
+                
+                # Validate content type matches detected type
+                validated_type = ContentValidator.validate_content_type(
+                    content, content_type or None
+                )
+                
+                # Validate file size
+                FileSizeValidator.validate_size(len(content), validated_type)
+                
                 input_type, format_type = ContentTypeDetector.detect_input_type(
-                    content_type=content_type, content=content
+                    content_type=validated_type, content=content
                 )
                 return input_type, format_type, {"content": content}, None
 
+            except ValueError:
+                # Re-raise ValueError for proper error handling
+                raise
             except Exception:
                 raise ValueError("Failed to read request body")
 
@@ -205,8 +262,16 @@ class ConvertController(Controller):
         if input_type in ["json_content", "binary", "multipart"]:
             if input_type == "json_content":
                 # Decode base64 content
-                content = base64.b64decode(request_data["content"])
+                try:
+                    content = base64.b64decode(request_data["content"])
+                except Exception:
+                    raise ValueError("Invalid base64 content")
+                
                 filename = request_data.get("filename")
+                
+                # Validate content type and size for base64 content
+                detected_type = ContentValidator.detect_content_type(content)
+                FileSizeValidator.validate_size(len(content), detected_type)
             else:
                 content = content_data["content"]
                 filename = content_data.get("filename")

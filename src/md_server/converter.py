@@ -3,12 +3,12 @@ import logging
 from typing import Optional
 from pathlib import Path
 from io import BytesIO
-from urllib.parse import urlparse
 
 from markitdown import MarkItDown, StreamInfo
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig
 
 from .core.config import Settings
+from .security import SSRFProtection
 
 
 async def check_browser_availability() -> bool:
@@ -37,13 +37,8 @@ async def check_browser_availability() -> bool:
 
 
 def validate_url(url: str) -> str:
-    """Validate and sanitize URL input"""
-    parsed = urlparse(url)
-    if not parsed.scheme or not parsed.netloc:
-        raise ValueError("Invalid URL format")
-    if parsed.scheme not in ["http", "https"]:
-        raise ValueError("Only HTTP/HTTPS URLs allowed")
-    return url
+    """Validate and sanitize URL input with SSRF protection"""
+    return SSRFProtection.validate_url(url)
 
 
 class UrlConverter:

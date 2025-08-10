@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     api_key: Optional[str] = None
     max_file_size: int = 50 * 1024 * 1024
     timeout_seconds: int = 30
+    url_fetch_timeout: int = 30
+    conversion_timeout: int = 120
     debug: bool = False
 
     http_proxy: Optional[str] = None
