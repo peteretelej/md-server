@@ -206,6 +206,33 @@ curl http://localhost:8080/health
 
 ## Security
 
+### API Key Authentication
+
+To secure your API, set the `MD_SERVER_API_KEY` environment variable:
+
+```bash
+# Set API key
+export MD_SERVER_API_KEY="your-secret-api-key-here"
+
+# Start server
+uvx md-server
+```
+
+When configured, all requests (except `/healthz`) require the `Authorization` header:
+
+```bash
+# Authenticated request
+curl -X POST localhost:8080/convert \
+  -H "Authorization: Bearer your-secret-api-key-here" \
+  --data-binary @document.pdf
+
+# Unauthenticated requests will return 401
+curl -X POST localhost:8080/convert --data-binary @document.pdf
+# {"success": false, "error": {"code": "UNAUTHORIZED", "message": "Missing Authorization header"}}
+```
+
+Use HTTPS in production to protect the key in transit.
+
 ### SSRF Protection
 
 - Blocked: Private IPs (10.x, 192.168.x, 127.x), AWS metadata (169.254.169.254)
