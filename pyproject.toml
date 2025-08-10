@@ -69,7 +69,8 @@ addopts = "--strict-markers --strict-config"
 markers = [
     "unit: Unit tests",
     "integration: Integration tests", 
-    "slow: Slow tests"
+    "slow: Slow tests",
+    "timeout: Tests with timeout limits"
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:pydantic._internal._config",

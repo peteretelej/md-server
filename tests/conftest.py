@@ -90,8 +90,12 @@ def mock_markitdown_factory() -> Mock:
 @pytest.fixture
 def mock_converter() -> Mock:
     """Mock MarkItDown converter for testing."""
+    from types import SimpleNamespace
+
     mock = Mock()
-    mock.convert.return_value = Mock(text_content="Mock converted content")
+    mock.convert.return_value = Mock(text_content="# Converted Content")
+    # Use SimpleNamespace to create an object with a markdown attribute that's a string
+    mock.convert_stream.return_value = SimpleNamespace(markdown="# Converted Content")
     return mock
 
 
@@ -105,6 +109,22 @@ def client() -> TestClient:
 def auth_headers() -> dict:
     """Headers with API key for authenticated requests."""
     return {"X-API-Key": "test-api-key"}
+
+
+@pytest.fixture
+def mock_settings():
+    """Mock settings for testing."""
+    from md_server.core.config import Settings
+
+    return Settings()
+
+
+@pytest.fixture
+def mock_markitdown() -> Mock:
+    """Mock MarkItDown instance for testing."""
+    mock = Mock()
+    mock.convert.return_value = Mock(text_content="# Converted Content")
+    return mock
 
 
 @pytest.fixture

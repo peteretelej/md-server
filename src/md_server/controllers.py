@@ -72,7 +72,10 @@ class ConvertController(Controller):
         except ValueError as e:
             self._handle_value_error(str(e))
         except Exception as e:
-            self._handle_generic_error(str(e), locals().get("format_type"))
+            format_type = (
+                locals().get("format_type") if "format_type" in locals() else None
+            )
+            self._handle_generic_error(str(e), format_type)
 
     async def _detect_input_type(self, request: Request) -> tuple:
         """Detect input type from request"""
