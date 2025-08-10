@@ -1,6 +1,5 @@
 import os
 import logging
-from typing import Optional
 import requests
 from markitdown import MarkItDown
 from .core.config import Settings

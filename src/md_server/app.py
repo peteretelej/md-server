@@ -56,11 +56,11 @@ def provide_settings() -> Settings:
     return get_settings()
 
 
-def provide_url_converter(settings: Settings) -> UrlConverter:
+def provide_url_converter(settings: Settings, converter: MarkItDown) -> UrlConverter:
     """Provide UrlConverter instance with settings and browser availability"""
     # Get browser availability from app state
     browser_available = getattr(provide_url_converter, "_browser_available", False)
-    return UrlConverter(settings, browser_available)
+    return UrlConverter(settings, browser_available, converter)
 
 
 async def startup_browser_detection():

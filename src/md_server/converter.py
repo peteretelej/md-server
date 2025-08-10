@@ -21,9 +21,10 @@ def validate_url(url: str) -> str:
 class UrlConverter:
     """URL to markdown converter with Crawl4AI and MarkItDown fallback"""
 
-    def __init__(self, settings: Settings, browser_available: bool):
+    def __init__(self, settings: Settings, browser_available: bool, markitdown_instance: MarkItDown):
         self.settings = settings
         self.browser_available = browser_available
+        self.markitdown_instance = markitdown_instance
 
     async def convert_url(self, url: str, enable_js: Optional[bool] = None) -> str:
         """Convert URL to markdown with browser or MarkItDown fallback"""
@@ -83,11 +84,7 @@ class UrlConverter:
     def _sync_convert_url_with_markitdown(self, url: str) -> str:
         """Synchronous MarkItDown URL conversion"""
         try:
-            # Use the existing MarkItDown instance from dependency injection
-            from .app import provide_converter
-
-            converter = provide_converter()
-            result = converter.convert(url)
+            result = self.markitdown_instance.convert(url)
             return result.markdown
         except Exception as e:
             logging.error(f"MarkItDown URL conversion failed for {url}: {e}")
