@@ -62,7 +62,7 @@ class TestMDConverter:
             assert isinstance(result, ConversionResult)
             assert result.success is True
             assert result.request_id.startswith("req_")
-            assert "Placeholder conversion" in result.markdown
+            assert "Test content" in result.markdown
             assert isinstance(result.metadata, ConversionMetadata)
             assert result.metadata.source_type == "file"
             assert result.metadata.source_size > 0
@@ -108,7 +108,7 @@ class TestMDConverter:
         
         assert isinstance(result, ConversionResult)
         assert result.success is True
-        assert "Placeholder conversion" in result.markdown
+        assert result.markdown  # Should have some content
         assert result.metadata.source_type == "url"
         assert result.metadata.detected_format == "text/html"
     
@@ -122,7 +122,7 @@ class TestMDConverter:
         
         assert isinstance(result, ConversionResult)
         assert result.success is True
-        assert "Placeholder conversion" in result.markdown
+        assert result.markdown  # Should have some content
         assert result.metadata.source_type == "content"
         assert result.metadata.source_size == len(content)
     
@@ -146,27 +146,7 @@ class TestMDConverter:
         
         assert isinstance(result, ConversionResult)
         assert result.success is True
-        assert "Placeholder conversion" in result.markdown
+        assert result.markdown  # Should have some content
         assert result.metadata.source_type == "text"
         assert result.metadata.detected_format == "text/html"
     
-    def test_detect_format_by_filename(self):
-        """Test format detection by filename."""
-        converter = MDConverter()
-        
-        # Test various file extensions
-        assert converter._detect_format(b"", "test.pdf") == "application/pdf"
-        assert converter._detect_format(b"", "test.docx") == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        assert converter._detect_format(b"", "test.html") == "text/html"
-        assert converter._detect_format(b"", "test.txt") == "text/plain"
-        assert converter._detect_format(b"", "test.md") == "text/markdown"
-    
-    def test_detect_format_by_magic_bytes(self):
-        """Test format detection by magic bytes."""
-        converter = MDConverter()
-        
-        # Test magic byte detection
-        assert converter._detect_format(b"%PDF-1.4", None) == "application/pdf"
-        assert converter._detect_format(b"PK\x03\x04", None) == "application/zip"
-        assert converter._detect_format(b"<html>", None) == "text/html"
-        assert converter._detect_format(b"unknown", None) == "application/octet-stream"

@@ -6,9 +6,14 @@ import time
 from pathlib import Path
 from typing import Optional, Union
 
+from markitdown import MarkItDown
+
 from .config import SDKConfig, get_logger
-from .exceptions import ConversionError, InvalidInputError, FileSizeError
+from .exceptions import ConversionError, InvalidInputError, FileSizeError, TimeoutError, UnsupportedFormatError, NetworkError
 from .models import ConversionResult, ConversionMetadata, ConversionOptions
+from .utils import convert_content_async, convert_text_with_mime_type_async, detect_format_from_content
+from .validators import FileSizeValidator, MimeTypeValidator, ContentValidator
+from .url_converter import URLConverter
 
 
 class MDConverter:
@@ -40,8 +45,26 @@ class MDConverter:
         self.config.setup_logging()
         self.logger = get_logger("converter")
         
+        # Initialize MarkItDown instance
+        self._markitdown = self._create_markitdown_instance()
+        
+        # Initialize URL converter
+        self._url_converter = URLConverter(self._markitdown, timeout)
+        
         if debug:
             self.logger.info("MDConverter initialized with options: %s", self.options)
+    
+    def _create_markitdown_instance(self) -> MarkItDown:
+        """Create MarkItDown instance with options."""
+        # Create MarkItDown with configuration based on options
+        kwargs = {}
+        
+        # Add any MarkItDown-specific options here
+        if hasattr(self.options, 'extract_images') and self.options.extract_images:
+            # MarkItDown doesn't have extract_images option, but we track it for future use
+            pass
+            
+        return MarkItDown(**kwargs)
     
     @classmethod
     def remote(
@@ -67,33 +90,49 @@ class MDConverter:
             raise InvalidInputError(f"File not found: {file_path}")
         
         file_size = path.stat().st_size
-        max_size_bytes = self.options.max_file_size_mb * 1024 * 1024
         
-        if file_size > max_size_bytes:
-            raise FileSizeError(
-                f"File size {file_size} exceeds limit {max_size_bytes}",
-                {"file_size": file_size, "limit": max_size_bytes}
-            )
+        # Validate file size
+        FileSizeValidator.validate_size(
+            file_size, 
+            max_size_mb=self.options.max_file_size_mb
+        )
         
         self.logger.info("Converting file: %s (%d bytes)", path, file_size)
         
         content = path.read_bytes()
+        detected_format = detect_format_from_content(content, path.name)
         
-        # For Phase 1, just return a placeholder result
-        # Phase 2 will implement actual conversion logic
-        markdown = f"# {path.name}\n\nPlaceholder conversion for {path.name}"
+        # Validate content type
+        ContentValidator.validate_content_type(content, detected_format)
         
-        processing_time = time.time() - start_time
-        
-        metadata = ConversionMetadata(
-            source_type="file",
-            source_size=file_size,
-            markdown_size=len(markdown.encode()),
-            processing_time=processing_time,
-            detected_format=self._detect_format(content, path.name)
-        )
-        
-        return ConversionResult(markdown=markdown, metadata=metadata)
+        try:
+            # Convert using MarkItDown
+            conversion_options = self._build_conversion_options(options)
+            markdown = await convert_content_async(
+                self._markitdown, 
+                content, 
+                filename=path.name,
+                options=conversion_options
+            )
+            
+            processing_time = time.time() - start_time
+            
+            metadata = ConversionMetadata(
+                source_type="file",
+                source_size=file_size,
+                markdown_size=len(markdown.encode()),
+                processing_time=processing_time,
+                detected_format=detected_format
+            )
+            
+            return ConversionResult(markdown=markdown, metadata=metadata)
+            
+        except (InvalidInputError, FileSizeError, UnsupportedFormatError) as e:
+            # Re-raise SDK exceptions as-is
+            raise
+        except Exception as e:
+            self.logger.error("File conversion failed for %s: %s", path, e)
+            raise ConversionError(f"Failed to convert file: {str(e)}", {"file_path": str(path)})
     
     async def convert_url(
         self,
@@ -106,20 +145,31 @@ class MDConverter:
         
         self.logger.info("Converting URL: %s", url)
         
-        # Placeholder implementation for Phase 1
-        markdown = f"# URL Content\n\nPlaceholder conversion for {url}"
-        
-        processing_time = time.time() - start_time
-        
-        metadata = ConversionMetadata(
-            source_type="url",
-            source_size=len(url),
-            markdown_size=len(markdown.encode()),
-            processing_time=processing_time,
-            detected_format="text/html"
-        )
-        
-        return ConversionResult(markdown=markdown, metadata=metadata)
+        # Use default from options if not specified
+        if js_rendering is None:
+            js_rendering = self.options.js_rendering
+            
+        try:
+            markdown = await self._url_converter.convert_url(url, js_rendering)
+            
+            processing_time = time.time() - start_time
+            
+            metadata = ConversionMetadata(
+                source_type="url",
+                source_size=len(url),
+                markdown_size=len(markdown.encode()),
+                processing_time=processing_time,
+                detected_format="text/html"
+            )
+            
+            return ConversionResult(markdown=markdown, metadata=metadata)
+            
+        except (InvalidInputError, NetworkError, TimeoutError) as e:
+            # Re-raise SDK exceptions as-is
+            raise
+        except Exception as e:
+            self.logger.error("URL conversion failed for %s: %s", url, e)
+            raise ConversionError(f"Failed to convert URL: {str(e)}", {"url": url})
     
     async def convert_content(
         self,
@@ -131,30 +181,49 @@ class MDConverter:
         start_time = time.time()
         
         content_size = len(content)
-        max_size_bytes = self.options.max_file_size_mb * 1024 * 1024
+        detected_format = detect_format_from_content(content, filename)
         
-        if content_size > max_size_bytes:
-            raise FileSizeError(
-                f"Content size {content_size} exceeds limit {max_size_bytes}",
-                {"content_size": content_size, "limit": max_size_bytes}
-            )
-        
-        self.logger.info("Converting content: %d bytes, filename=%s", content_size, filename)
-        
-        # Placeholder implementation for Phase 1
-        markdown = f"# Binary Content\n\nPlaceholder conversion for {filename or 'unnamed'}"
-        
-        processing_time = time.time() - start_time
-        
-        metadata = ConversionMetadata(
-            source_type="content",
-            source_size=content_size,
-            markdown_size=len(markdown.encode()),
-            processing_time=processing_time,
-            detected_format=self._detect_format(content, filename)
+        # Validate file size
+        FileSizeValidator.validate_size(
+            content_size, 
+            content_type=detected_format,
+            max_size_mb=self.options.max_file_size_mb
         )
         
-        return ConversionResult(markdown=markdown, metadata=metadata)
+        # Validate content type
+        ContentValidator.validate_content_type(content, detected_format)
+        
+        self.logger.info("Converting content: %d bytes, filename=%s, format=%s", 
+                        content_size, filename, detected_format)
+        
+        try:
+            # Convert using MarkItDown
+            conversion_options = self._build_conversion_options(options)
+            markdown = await convert_content_async(
+                self._markitdown, 
+                content, 
+                filename=filename,
+                options=conversion_options
+            )
+            
+            processing_time = time.time() - start_time
+            
+            metadata = ConversionMetadata(
+                source_type="content",
+                source_size=content_size,
+                markdown_size=len(markdown.encode()),
+                processing_time=processing_time,
+                detected_format=detected_format
+            )
+            
+            return ConversionResult(markdown=markdown, metadata=metadata)
+            
+        except (FileSizeError, UnsupportedFormatError) as e:
+            # Re-raise SDK exceptions as-is
+            raise
+        except Exception as e:
+            self.logger.error("Content conversion failed: %s", e)
+            raise ConversionError(f"Failed to convert content: {str(e)}", {"filename": filename})
     
     async def convert_text(
         self,
@@ -165,45 +234,59 @@ class MDConverter:
         """Convert text with MIME type to markdown."""
         start_time = time.time()
         
+        # Validate MIME type
+        validated_mime_type = MimeTypeValidator.validate_mime_type(mime_type)
+        
         text_size = len(text.encode())
         
-        self.logger.info("Converting text: %d bytes, mime_type=%s", text_size, mime_type)
-        
-        # Placeholder implementation for Phase 1
-        markdown = f"# Text Content\n\nPlaceholder conversion for {mime_type} text"
-        
-        processing_time = time.time() - start_time
-        
-        metadata = ConversionMetadata(
-            source_type="text",
-            source_size=text_size,
-            markdown_size=len(markdown.encode()),
-            processing_time=processing_time,
-            detected_format=mime_type
+        # Validate text size
+        FileSizeValidator.validate_size(
+            text_size, 
+            content_type=validated_mime_type,
+            max_size_mb=self.options.max_file_size_mb
         )
         
-        return ConversionResult(markdown=markdown, metadata=metadata)
+        self.logger.info("Converting text: %d bytes, mime_type=%s", text_size, validated_mime_type)
+        
+        try:
+            # Convert using MarkItDown
+            conversion_options = self._build_conversion_options(options)
+            markdown = await convert_text_with_mime_type_async(
+                self._markitdown, 
+                text, 
+                validated_mime_type,
+                options=conversion_options
+            )
+            
+            processing_time = time.time() - start_time
+            
+            metadata = ConversionMetadata(
+                source_type="text",
+                source_size=text_size,
+                markdown_size=len(markdown.encode()),
+                processing_time=processing_time,
+                detected_format=validated_mime_type
+            )
+            
+            return ConversionResult(markdown=markdown, metadata=metadata)
+            
+        except (InvalidInputError, FileSizeError) as e:
+            # Re-raise SDK exceptions as-is
+            raise
+        except Exception as e:
+            self.logger.error("Text conversion failed: %s", e)
+            raise ConversionError(f"Failed to convert text: {str(e)}", {"mime_type": validated_mime_type})
     
-    def _detect_format(self, content: bytes, filename: Optional[str] = None) -> str:
-        """Detect file format from content and filename."""
-        if filename:
-            suffix = Path(filename).suffix.lower()
-            format_map = {
-                ".pdf": "application/pdf",
-                ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                ".html": "text/html",
-                ".txt": "text/plain",
-                ".md": "text/markdown",
-            }
-            if suffix in format_map:
-                return format_map[suffix]
+    def _build_conversion_options(self, options: dict) -> dict:
+        """Build conversion options dictionary."""
+        conversion_options = {}
         
-        # Basic magic byte detection
-        if content.startswith(b"%PDF"):
-            return "application/pdf"
-        elif content.startswith(b"PK"):
-            return "application/zip"
-        elif content.startswith(b"<"):
-            return "text/html"
-        
-        return "application/octet-stream"
+        # Merge SDK options with method-specific options
+        if self.options.clean_markdown:
+            conversion_options["clean_markdown"] = True
+            
+        # Add any additional options passed to the method
+        if options:
+            conversion_options.update(options)
+            
+        return conversion_options
