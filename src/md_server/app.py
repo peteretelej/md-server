@@ -13,6 +13,7 @@ from .browser import BrowserChecker
 from .models import HealthResponse, FormatsResponse
 from .detection import ContentTypeDetector
 from .factories import MarkItDownFactory
+from .sdk import MDConverter
 
 # Track server start time for uptime calculation
 _server_start_time = time.time()
@@ -63,6 +64,23 @@ def provide_url_converter(settings: Settings, converter: MarkItDown) -> UrlConve
     return UrlConverter(settings, browser_available, converter)
 
 
+def provide_md_converter(settings: Settings) -> MDConverter:
+    """Provide MDConverter SDK instance with settings configuration"""
+    # Get browser availability from app state
+    browser_available = getattr(provide_url_converter, "_browser_available", False)
+    
+    return MDConverter(
+        ocr_enabled=getattr(settings, 'ocr_enabled', False),
+        js_rendering=browser_available,
+        timeout=settings.conversion_timeout,
+        max_file_size_mb=settings.max_file_size // (1024 * 1024),  # Convert bytes to MB
+        extract_images=getattr(settings, 'extract_images', False),
+        preserve_formatting=getattr(settings, 'preserve_formatting', True),
+        clean_markdown=getattr(settings, 'clean_markdown', False),
+        debug=settings.debug,
+    )
+
+
 async def startup_browser_detection():
     """Detect browser availability at startup and configure logging"""
     logging.basicConfig(level=logging.INFO)
@@ -89,6 +107,7 @@ app = Litestar(
         "converter": Provide(provide_converter, sync_to_thread=False),
         "settings": Provide(provide_settings, sync_to_thread=False),
         "url_converter": Provide(provide_url_converter, sync_to_thread=False),
+        "md_converter": Provide(provide_md_converter, sync_to_thread=False),
     },
     middleware=middleware,
     debug=settings.debug,
