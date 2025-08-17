@@ -281,8 +281,129 @@ curl -X POST localhost:8080/convert --data-binary @doc.pdf \
 
 </details>
 
+# Python SDK
+
+## Installation
+
+The SDK is included with md-server:
+
+```bash
+pip install md-server
+```
+
+## Local Usage
+
+```python
+from md_server import MDConverter
+
+# Create converter
+converter = MDConverter()
+
+# Convert file
+result = await converter.convert_file("document.pdf")
+print(result.markdown)
+
+# Convert URL
+result = await converter.convert_url("https://example.com")
+print(result.markdown)
+
+# Convert binary content
+with open("file.pdf", "rb") as f:
+    result = await converter.convert_content(f.read(), filename="file.pdf")
+
+# Convert text with MIME type
+result = await converter.convert_text("<h1>HTML</h1>", mime_type="text/html")
+```
+
+## Remote Usage
+
+```python
+from md_server import MDConverter
+
+# Connect to remote md-server
+converter = MDConverter.remote(
+    endpoint="https://api.example.com",
+    api_key="your-api-key"
+)
+
+result = await converter.convert_file("document.pdf")
+```
+
+## Sync API
+
+```python
+from md_server import MDConverter
+
+converter = MDConverter()
+
+# Sync versions
+result = converter.convert_file_sync("document.pdf")
+result = converter.convert_url_sync("https://example.com")
+```
+
+## Configuration
+
+```python
+converter = MDConverter(
+    ocr_enabled=True,
+    js_rendering=True,
+    timeout=60,
+    max_file_size_mb=100,
+    extract_images=True,
+    preserve_formatting=True
+)
+```
+
+## Models
+
+### ConversionResult
+
+```python
+@dataclass
+class ConversionResult:
+    markdown: str
+    metadata: ConversionMetadata
+    success: bool = True
+    request_id: str = None
+```
+
+### ConversionMetadata
+
+```python
+@dataclass
+class ConversionMetadata:
+    source_type: str
+    source_size: int
+    markdown_size: int
+    processing_time: float
+    detected_format: str
+    warnings: List[str] = None
+```
+
+## Exceptions
+
+```python
+from md_server import (
+    ConversionError,
+    InvalidInputError,
+    NetworkError,
+    TimeoutError,
+    FileSizeError,
+    UnsupportedFormatError
+)
+
+try:
+    result = await converter.convert_file("document.pdf")
+except FileSizeError:
+    print("File too large")
+except UnsupportedFormatError:
+    print("Format not supported")
+except ConversionError as e:
+    print(f"Conversion failed: {e}")
+```
+
 <details>
-<summary>Python SDK</summary>
+<summary>Legacy HTTP Client Example</summary>
 
 ```python
 import requests

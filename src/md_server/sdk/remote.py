@@ -15,7 +15,21 @@ from .sync import SyncConverterMixin, sync_wrapper
 
 
 class RemoteMDConverter(SyncConverterMixin):
-    """Remote converter client for md-server API."""
+    """
+    Remote converter client for md-server API.
+
+    Provides a client interface to connect to remote md-server instances
+    for document conversion. Handles authentication, connection pooling,
+    retry logic, and error mapping.
+
+    Example:
+        >>> client = RemoteMDConverter(
+        ...     endpoint="https://api.example.com",
+        ...     api_key="your-secret-key",
+        ...     timeout=30
+        ... )
+        >>> result = await client.convert_file("document.pdf")
+    """
 
     def __init__(
         self,

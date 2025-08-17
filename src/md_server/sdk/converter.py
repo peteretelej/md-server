@@ -29,7 +29,31 @@ from .url_converter import URLConverter
 
 
 class MDConverter(SyncConverterMixin):
-    """Main converter class for document to markdown conversion."""
+    """
+    Main converter class for document to markdown conversion.
+
+    This class provides both local and remote conversion capabilities for various
+    document formats including PDFs, Word documents, web pages, and text content.
+
+    Examples:
+        Basic usage:
+        >>> converter = MDConverter()
+        >>> result = await converter.convert_file("document.pdf")
+        >>> print(result.markdown)
+
+        With configuration:
+        >>> converter = MDConverter(
+        ...     ocr_enabled=True,
+        ...     js_rendering=True,
+        ...     timeout=60
+        ... )
+
+        Remote conversion:
+        >>> remote = MDConverter.remote(
+        ...     endpoint="https://api.example.com",
+        ...     api_key="your-key"
+        ... )
+    """
 
     def __init__(
         self,
@@ -42,7 +66,27 @@ class MDConverter(SyncConverterMixin):
         clean_markdown: bool = False,
         debug: bool = False,
     ):
-        """Initialize converter with configuration."""
+        """
+        Initialize converter with configuration.
+
+        Args:
+            ocr_enabled: Enable OCR for scanned PDFs and images
+            js_rendering: Use headless browser for JavaScript-heavy web pages
+            timeout: Maximum time in seconds for conversion operations
+            max_file_size_mb: Maximum file size in MB (default 50MB)
+            extract_images: Extract and reference embedded images
+            preserve_formatting: Preserve complex formatting in output
+            clean_markdown: Clean and normalize markdown output
+            debug: Enable debug logging
+
+        Example:
+            >>> converter = MDConverter(
+            ...     ocr_enabled=True,
+            ...     js_rendering=True,
+            ...     timeout=60,
+            ...     max_file_size_mb=100
+            ... )
+        """
         self.options = ConversionOptions(
             ocr_enabled=ocr_enabled,
             js_rendering=js_rendering,
@@ -80,7 +124,29 @@ class MDConverter(SyncConverterMixin):
 
     @classmethod
     def remote(cls, endpoint: str, api_key: Optional[str] = None, timeout: int = 30):
-        """Create a remote converter client."""
+        """
+        Create a remote converter client.
+
+        Connect to a remote md-server instance for conversion operations.
+        Useful for distributed architectures or when you don't want to
+        install conversion dependencies locally.
+
+        Args:
+            endpoint: Base URL of the remote md-server instance
+            api_key: Optional API key for authentication
+            timeout: HTTP request timeout in seconds
+
+        Returns:
+            RemoteMDConverter instance configured for the endpoint
+
+        Example:
+            >>> converter = MDConverter.remote(
+            ...     endpoint="https://api.example.com",
+            ...     api_key="your-secret-key",
+            ...     timeout=30
+            ... )
+            >>> result = await converter.convert_file("document.pdf")
+        """
         from .remote import RemoteMDConverter
 
         return RemoteMDConverter(endpoint, api_key, timeout)
@@ -88,7 +154,31 @@ class MDConverter(SyncConverterMixin):
     async def convert_file(
         self, file_path: Union[str, Path], **options
     ) -> ConversionResult:
-        """Convert a local file to markdown."""
+        """
+        Convert a local file to markdown.
+
+        Supports various document formats including PDF, DOCX, XLSX, PPTX,
+        images (with OCR), and many others. The format is automatically
+        detected from file content and extension.
+
+        Args:
+            file_path: Path to the file to convert (str or Path object)
+            **options: Additional conversion options to override defaults
+
+        Returns:
+            ConversionResult containing markdown content and metadata
+
+        Raises:
+            InvalidInputError: If file doesn't exist or path is invalid
+            FileSizeError: If file exceeds configured size limits
+            UnsupportedFormatError: If file format is not supported
+            ConversionError: If conversion process fails
+
+        Example:
+            >>> result = await converter.convert_file("/path/to/document.pdf")
+            >>> print(result.markdown)
+            >>> print(f"Processed {result.metadata.source_size} bytes")
+        """
         start_time = time.time()
 
         path = Path(file_path)
@@ -144,7 +234,38 @@ class MDConverter(SyncConverterMixin):
     async def convert_url(
         self, url: str, js_rendering: Optional[bool] = None, **options
     ) -> ConversionResult:
-        """Convert URL content to markdown."""
+        """
+        Convert URL content to markdown.
+
+        Fetches content from the specified URL and converts it to markdown.
+        Can handle both static HTML pages and JavaScript-heavy single-page
+        applications when js_rendering is enabled.
+
+        Args:
+            url: URL to fetch and convert
+            js_rendering: Override global js_rendering setting for this request.
+                         If True, uses headless browser for JavaScript execution
+            **options: Additional conversion options to override defaults
+
+        Returns:
+            ConversionResult containing markdown content and metadata
+
+        Raises:
+            InvalidInputError: If URL format is invalid
+            NetworkError: If URL cannot be accessed or times out
+            TimeoutError: If conversion exceeds configured timeout
+            ConversionError: If conversion process fails
+
+        Example:
+            >>> # Static page conversion
+            >>> result = await converter.convert_url("https://example.com")
+            
+            >>> # JavaScript-heavy page
+            >>> result = await converter.convert_url(
+            ...     "https://spa.example.com",
+            ...     js_rendering=True
+            ... )
+        """
         start_time = time.time()
 
         self.logger.info("Converting URL: %s", url)
@@ -178,7 +299,42 @@ class MDConverter(SyncConverterMixin):
     async def convert_content(
         self, content: bytes, filename: Optional[str] = None, **options
     ) -> ConversionResult:
-        """Convert binary content to markdown."""
+        """
+        Convert binary content to markdown.
+
+        Converts raw binary data to markdown. The format is automatically
+        detected using magic bytes and the optional filename. Useful for
+        processing content from memory, APIs, or network streams.
+
+        Args:
+            content: Binary content to convert
+            filename: Optional filename for format detection hints.
+                     Should include file extension for best results
+            **options: Additional conversion options to override defaults
+
+        Returns:
+            ConversionResult containing markdown content and metadata
+
+        Raises:
+            FileSizeError: If content exceeds configured size limits
+            UnsupportedFormatError: If content format is not supported
+            ConversionError: If conversion process fails
+
+        Example:
+            >>> with open("document.pdf", "rb") as f:
+            ...     content = f.read()
+            >>> result = await converter.convert_content(
+            ...     content, 
+            ...     filename="document.pdf"
+            ... )
+            
+            >>> # From API response
+            >>> response = requests.get("https://example.com/file.docx")
+            >>> result = await converter.convert_content(
+            ...     response.content,
+            ...     filename="downloaded.docx"
+            ... )
+        """
         start_time = time.time()
 
         content_size = len(content)
@@ -232,7 +388,39 @@ class MDConverter(SyncConverterMixin):
     async def convert_text(
         self, text: str, mime_type: str, **options
     ) -> ConversionResult:
-        """Convert text with MIME type to markdown."""
+        """
+        Convert text with MIME type to markdown.
+
+        Converts text content with a specified MIME type to markdown.
+        Useful for processing HTML, XML, JSON, CSV, or other text-based
+        formats where you know the content type.
+
+        Args:
+            text: Text content to convert
+            mime_type: MIME type of the content (e.g., "text/html", "text/xml")
+            **options: Additional conversion options to override defaults
+
+        Returns:
+            ConversionResult containing markdown content and metadata
+
+        Raises:
+            InvalidInputError: If text is empty or MIME type is invalid
+            FileSizeError: If text exceeds configured size limits
+            ConversionError: If conversion process fails
+
+        Example:
+            >>> # Convert HTML
+            >>> html = "<h1>Title</h1><p>Content</p>"
+            >>> result = await converter.convert_text(html, "text/html")
+            
+            >>> # Convert XML
+            >>> xml = "<?xml version='1.0'?><root><item>Data</item></root>"
+            >>> result = await converter.convert_text(xml, "text/xml")
+            
+            >>> # Convert CSV
+            >>> csv_data = "name,age\nJohn,30\nJane,25"
+            >>> result = await converter.convert_text(csv_data, "text/csv")
+        """
         start_time = time.time()
 
         # Validate MIME type

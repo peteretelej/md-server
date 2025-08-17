@@ -124,3 +124,11 @@ Environment variables:
 - Integration tests for endpoints
 - Security validation tests
 - Performance benchmarks
+
+## Documentation Structure
+
+- `README.md` - Concise intro, quick start, basic examples
+- `docs/API.md` - Consolidated API reference (HTTP, SDK, MCP)
+- `docs/sdk/README.md` - SDK usage guide, examples, patterns
+- `docs/mcp/README.md` - MCP integration guide (future)
+- `docs/design.md` - Architecture documentation
