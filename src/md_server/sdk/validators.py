@@ -69,7 +69,7 @@ class FileSizeValidator:
         if max_size_mb:
             limit = max_size_mb * 1024 * 1024
         else:
-            limit = cls.FORMAT_LIMITS.get(content_type, cls.DEFAULT_MAX_SIZE)
+            limit = cls.FORMAT_LIMITS.get(content_type or "", cls.DEFAULT_MAX_SIZE)
 
         if content_size > limit:
             limit_mb = limit / (1024 * 1024)

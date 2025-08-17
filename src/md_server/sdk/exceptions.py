@@ -2,11 +2,13 @@
 Custom exceptions for the MD Server SDK.
 """
 
+from typing import Dict, Any, Optional
+
 
 class ConversionError(Exception):
     """Base exception for conversion errors."""
 
-    def __init__(self, message: str, details: dict = None):
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.message = message
         self.details = details or {}

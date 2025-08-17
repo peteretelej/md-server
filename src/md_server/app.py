@@ -8,9 +8,8 @@ from markitdown import MarkItDown
 from .core.config import get_settings, Settings
 from .controllers import ConvertController
 from .middleware.auth import create_auth_middleware
-from .converter import UrlConverter
 from .browser import BrowserChecker
-from .models import HealthResponse, FormatsResponse
+from .models import HealthResponse, FormatsResponse, SystemCapabilities
 from .detection import ContentTypeDetector
 from .factories import MarkItDownFactory
 from .sdk import MDConverter
@@ -35,7 +34,17 @@ async def health() -> Response[HealthResponse]:
 @get("/formats")
 async def formats() -> Response[FormatsResponse]:
     """Return supported formats and their capabilities"""
-    formats_data = FormatsResponse(formats=ContentTypeDetector.get_supported_formats())
+    supported_formats_dict = ContentTypeDetector.get_supported_formats()
+
+    # Create capabilities with browser detection
+    browser_available = await BrowserChecker.is_available()
+    capabilities = SystemCapabilities(browser_available=browser_available)
+
+    formats_data = FormatsResponse(
+        formats=supported_formats_dict,
+        supported_formats=list(supported_formats_dict.keys()),
+        capabilities=capabilities,
+    )
     return Response(formats_data, status_code=HTTP_200_OK)
 
 
@@ -57,26 +66,19 @@ def provide_settings() -> Settings:
     return get_settings()
 
 
-def provide_url_converter(settings: Settings, converter: MarkItDown) -> UrlConverter:
-    """Provide UrlConverter instance with settings and browser availability"""
-    # Get browser availability from app state
-    browser_available = getattr(provide_url_converter, "_browser_available", False)
-    return UrlConverter(settings, browser_available, converter)
-
-
 def provide_md_converter(settings: Settings) -> MDConverter:
     """Provide MDConverter SDK instance with settings configuration"""
     # Get browser availability from app state
-    browser_available = getattr(provide_url_converter, "_browser_available", False)
-    
+    browser_available = getattr(provide_md_converter, "_browser_available", False)
+
     return MDConverter(
-        ocr_enabled=getattr(settings, 'ocr_enabled', False),
+        ocr_enabled=getattr(settings, "ocr_enabled", False),
         js_rendering=browser_available,
         timeout=settings.conversion_timeout,
         max_file_size_mb=settings.max_file_size // (1024 * 1024),  # Convert bytes to MB
-        extract_images=getattr(settings, 'extract_images', False),
-        preserve_formatting=getattr(settings, 'preserve_formatting', True),
-        clean_markdown=getattr(settings, 'clean_markdown', False),
+        extract_images=getattr(settings, "extract_images", False),
+        preserve_formatting=getattr(settings, "preserve_formatting", True),
+        clean_markdown=getattr(settings, "clean_markdown", False),
         debug=settings.debug,
     )
 
@@ -87,11 +89,11 @@ async def startup_browser_detection():
 
     try:
         browser_available = await BrowserChecker.is_available()
-        provide_url_converter._browser_available = browser_available
+        provide_md_converter._browser_available = browser_available
         BrowserChecker.log_availability(browser_available)
     except Exception as e:
         logging.error(f"Startup browser detection failed: {e}")
-        provide_url_converter._browser_available = False
+        provide_md_converter._browser_available = False
 
 
 settings = get_settings()
@@ -106,7 +108,6 @@ app = Litestar(
     dependencies={
         "converter": Provide(provide_converter, sync_to_thread=False),
         "settings": Provide(provide_settings, sync_to_thread=False),
-        "url_converter": Provide(provide_url_converter, sync_to_thread=False),
         "md_converter": Provide(provide_md_converter, sync_to_thread=False),
     },
     middleware=middleware,

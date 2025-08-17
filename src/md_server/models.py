@@ -142,9 +142,17 @@ class FormatCapabilities(BaseModel):
     max_size_mb: int = Field(description="Maximum file size in MB")
 
 
+class SystemCapabilities(BaseModel):
+    browser_available: bool = Field(description="Whether browser support is available")
+
+
 class FormatsResponse(BaseModel):
     formats: Dict[str, FormatCapabilities] = Field(
         description="Supported formats and their capabilities"
+    )
+    supported_formats: List[str] = Field(description="List of supported format names")
+    capabilities: SystemCapabilities = Field(
+        description="System capability information"
     )
 
 

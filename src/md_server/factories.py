@@ -5,9 +5,26 @@ from markitdown import MarkItDown
 from .core.config import Settings
 
 
-class HTTPClientFactory:
+class MarkItDownFactory:
     @staticmethod
-    def create_session(settings: Settings) -> requests.Session:
+    def create(settings: Settings) -> MarkItDown:
+        """Create MarkItDown instance with all configured services"""
+        session = MarkItDownFactory._create_session(settings)
+        llm_client, llm_model = MarkItDownFactory._create_llm_client(settings)
+        docintel_endpoint, docintel_credential = (
+            MarkItDownFactory._create_azure_credential(settings)
+        )
+
+        return MarkItDown(
+            requests_session=session,
+            llm_client=llm_client,
+            llm_model=llm_model,
+            docintel_endpoint=docintel_endpoint,
+            docintel_credential=docintel_credential,
+        )
+
+    @staticmethod
+    def _create_session(settings: Settings) -> requests.Session:
         """Create requests session with proxy configuration"""
         session = requests.Session()
 
@@ -25,10 +42,8 @@ class HTTPClientFactory:
 
         return session
 
-
-class LLMClientFactory:
     @staticmethod
-    def create_client(settings: Settings):
+    def _create_llm_client(settings: Settings):
         """Create LLM client if OpenAI configuration is available"""
         if not settings.openai_api_key:
             return None, None
@@ -46,10 +61,8 @@ class LLMClientFactory:
             )
             return None, None
 
-
-class AzureDocIntelFactory:
     @staticmethod
-    def create_credential(settings: Settings):
+    def _create_azure_credential(settings: Settings):
         """Create Azure Document Intelligence credential if available"""
         if not settings.azure_doc_intel_key or not settings.azure_doc_intel_endpoint:
             return None, None
@@ -62,22 +75,3 @@ class AzureDocIntelFactory:
         except ImportError:
             logging.warning("Azure Document Intelligence not available")
             return None, None
-
-
-class MarkItDownFactory:
-    @staticmethod
-    def create(settings: Settings) -> MarkItDown:
-        """Create MarkItDown instance with all configured services"""
-        session = HTTPClientFactory.create_session(settings)
-        llm_client, llm_model = LLMClientFactory.create_client(settings)
-        docintel_endpoint, docintel_credential = AzureDocIntelFactory.create_credential(
-            settings
-        )
-
-        return MarkItDown(
-            requests_session=session,
-            llm_client=llm_client,
-            llm_model=llm_model,
-            docintel_endpoint=docintel_endpoint,
-            docintel_credential=docintel_credential,
-        )

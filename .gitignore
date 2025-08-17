@@ -12,6 +12,8 @@ wheels/
 _temp/
 
 .coverage
+.coverage.*
 coverage.xml
+htmlcov/
 
 .env

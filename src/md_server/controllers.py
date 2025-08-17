@@ -10,14 +10,12 @@ from litestar.status_codes import (
     HTTP_500_INTERNAL_SERVER_ERROR,
     HTTP_413_REQUEST_ENTITY_TOO_LARGE,
 )
-import asyncio
 import base64
 import time
 
 from .models import (
     ConvertResponse,
     ErrorResponse,
-    ConversionOptions,
 )
 from .sdk import MDConverter
 from .sdk.exceptions import (
@@ -30,7 +28,6 @@ from .sdk.exceptions import (
 )
 from .core.config import Settings
 from .detection import ContentTypeDetector
-from .security import FileSizeValidator, ContentValidator
 
 
 class ConvertController(Controller):
@@ -49,12 +46,11 @@ class ConvertController(Controller):
         try:
             # Parse request to determine input type and data
             input_data = await self._parse_request(request)
-            
+
             # Use SDK for conversion based on input type
             if input_data.get("url"):
                 result = await md_converter.convert_url(
-                    input_data["url"],
-                    js_rendering=input_data.get("js_rendering")
+                    input_data["url"], js_rendering=input_data.get("js_rendering")
                 )
             elif input_data.get("content"):
                 # Decode base64 content if needed
@@ -65,20 +61,18 @@ class ConvertController(Controller):
                         raise InvalidInputError("Invalid base64 content")
                 else:
                     content = input_data["content"]
-                
+
                 result = await md_converter.convert_content(
-                    content,
-                    filename=input_data.get("filename")
+                    content, filename=input_data.get("filename")
                 )
             elif input_data.get("text"):
                 # Determine MIME type: if specified use it, otherwise use markdown for backward compatibility
                 mime_type = input_data.get("mime_type", "text/markdown")
-                result = await md_converter.convert_text(
-                    input_data["text"],
-                    mime_type
-                )
+                result = await md_converter.convert_text(input_data["text"], mime_type)
             else:
-                raise InvalidInputError("No valid input provided (url, content, or text)")
+                raise InvalidInputError(
+                    "No valid input provided (url, content, or text)"
+                )
 
             # Convert SDK result to API response format
             response = self._create_success_response_from_sdk(result, start_time)
@@ -106,15 +100,15 @@ class ConvertController(Controller):
         if "application/json" in content_type:
             try:
                 json_data = await request.json()
-                
+
                 # Extract options if present
                 options = json_data.get("options", {})
-                
+
                 # Add options to the data for SDK consumption
                 result = json_data.copy()
                 if options:
                     result.update(options)
-                
+
                 return result
             except Exception:
                 raise ValueError("Invalid JSON in request body")
@@ -131,10 +125,7 @@ class ConvertController(Controller):
                 file = form_data["file"]
                 content = await file.read()
 
-                return {
-                    "content": content,
-                    "filename": file.filename
-                }
+                return {"content": content, "filename": file.filename}
 
             except ValueError:
                 raise
@@ -156,14 +147,16 @@ class ConvertController(Controller):
         """Create a successful conversion response from SDK result"""
         # Calculate total time (including SDK processing time)
         total_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Use original API source type mapping for backward compatibility
         # For URL inputs, use "url" as source_type regardless of detected format
         if result.metadata.source_type == "url":
             source_type = "url"
         else:
-            source_type = ContentTypeDetector.get_source_type(result.metadata.detected_format)
-        
+            source_type = ContentTypeDetector.get_source_type(
+                result.metadata.detected_format
+            )
+
         return ConvertResponse.create_success(
             markdown=result.markdown,
             source_type=source_type,
@@ -183,7 +176,7 @@ class ConvertController(Controller):
                 suggestions=["Check input format", "Verify request structure"],
             )
             status_code = HTTP_400_BAD_REQUEST
-            
+
         elif isinstance(error, FileSizeError):
             error_response = ErrorResponse.create_error(
                 code="FILE_TOO_LARGE",
@@ -192,7 +185,7 @@ class ConvertController(Controller):
                 suggestions=["Use a smaller file", "Check size limits at /formats"],
             )
             status_code = HTTP_413_REQUEST_ENTITY_TOO_LARGE
-            
+
         elif isinstance(error, UnsupportedFormatError):
             error_response = ErrorResponse.create_error(
                 code="UNSUPPORTED_FORMAT",
@@ -201,7 +194,7 @@ class ConvertController(Controller):
                 suggestions=["Check supported formats at /formats"],
             )
             status_code = HTTP_415_UNSUPPORTED_MEDIA_TYPE
-            
+
         elif isinstance(error, TimeoutError):
             error_response = ErrorResponse.create_error(
                 code="TIMEOUT",
@@ -210,7 +203,7 @@ class ConvertController(Controller):
                 suggestions=["Try with a smaller file", "Increase timeout in options"],
             )
             status_code = HTTP_408_REQUEST_TIMEOUT
-            
+
         elif isinstance(error, NetworkError):
             error_response = ErrorResponse.create_error(
                 code="NETWORK_ERROR",
@@ -219,20 +212,17 @@ class ConvertController(Controller):
                 suggestions=["Check URL accessibility", "Verify network connectivity"],
             )
             status_code = HTTP_400_BAD_REQUEST
-            
+
         else:  # ConversionError or generic
             error_response = ErrorResponse.create_error(
                 code="CONVERSION_FAILED",
                 message=str(error),
-                details=getattr(error, 'details', {}),
+                details=getattr(error, "details", {}),
                 suggestions=["Check input format", "Contact support if issue persists"],
             )
             status_code = HTTP_500_INTERNAL_SERVER_ERROR
 
-        raise HTTPException(
-            status_code=status_code,
-            detail=error_response.model_dump()
-        )
+        raise HTTPException(status_code=status_code, detail=error_response.model_dump())
 
     def _handle_value_error(self, error_msg: str) -> None:
         """Handle ValueError with specific error type detection"""
@@ -309,7 +299,7 @@ class ConvertController(Controller):
         elif input_type == "json_content":
             try:
                 return len(base64.b64decode(request_data.get("content", "")))
-            except:
+            except Exception:
                 return 0
         elif content_data and "content" in content_data:
             return len(content_data["content"])

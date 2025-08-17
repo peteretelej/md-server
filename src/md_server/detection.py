@@ -76,11 +76,39 @@ class ContentTypeDetector:
         # Check if it's likely text
         try:
             text = content.decode("utf-8")
+
+            # Check for binary content indicators
+            if b"\x00" in content:  # Null bytes are strong indicator of binary
+                return "application/octet-stream"
+
+            # Check for high ratio of non-printable characters
+            non_printable_count = sum(
+                1 for byte in content if byte < 32 and byte not in [9, 10, 13]
+            )
+            if len(content) > 0 and non_printable_count / len(content) > 0.3:
+                return "application/octet-stream"
+
             if text.strip().startswith("#") or text.strip().startswith("*"):
                 return "text/markdown"
             return "text/plain"
         except UnicodeDecodeError:
-            pass
+            return "application/octet-stream"
+
+        return None
+
+    @classmethod
+    def detect_from_content(
+        cls, content: bytes, filename: Optional[str] = None
+    ) -> Optional[str]:
+        """Detect content type from content with optional filename hint"""
+        # Try magic bytes detection first
+        magic_result = cls.detect_from_magic_bytes(content)
+        if magic_result:
+            return magic_result
+
+        # Fall back to filename detection if provided
+        if filename:
+            return cls.detect_from_filename(filename)
 
         return None
 

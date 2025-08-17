@@ -3,15 +3,27 @@ Remote converter client for md-server API.
 """
 
 import asyncio
-import base64
 from typing import Optional, Union, Dict, Any
 from pathlib import Path
 
 import httpx
 
-from .models import ConversionResult, ConversionMetadata
+from .models import ConversionResult
 from .exceptions import ConversionError, NetworkError, TimeoutError, InvalidInputError
 from .sync import SyncConverterMixin, sync_wrapper
+from .core import (
+    build_file_payload,
+    build_url_payload,
+    build_text_payload,
+    parse_conversion_response,
+    build_auth_headers,
+    merge_request_options,
+    parse_http_error_response,
+    should_retry_request,
+    calculate_retry_delay,
+    classify_request_exception,
+)
+from .core.validation import validate_file_path
 
 
 class RemoteMDConverter(SyncConverterMixin):
@@ -58,15 +70,8 @@ class RemoteMDConverter(SyncConverterMixin):
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-            headers=self._build_headers(),
+            headers=build_auth_headers(self.api_key),
         )
-
-    def _build_headers(self) -> Dict[str, str]:
-        """Build default headers for requests."""
-        headers = {"User-Agent": "md-server-sdk/1.0", "Accept": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
 
     async def __aenter__(self):
         """Context manager entry."""
@@ -98,36 +103,15 @@ class RemoteMDConverter(SyncConverterMixin):
 
                 return response
 
-            except httpx.TimeoutException:
-                last_exception = TimeoutError(
-                    f"Request timed out after {self.timeout}s", {"url": url}
-                )
-                if attempt < self.max_retries:
-                    await asyncio.sleep(
-                        self.retry_delay * (2**attempt)
-                    )  # Exponential backoff
-                    continue
-                break
-
-            except (
-                httpx.NetworkError,
-                httpx.ConnectError,
-                ConnectionError,
-                OSError,
-            ) as e:
-                last_exception = NetworkError(f"Network error: {str(e)}", {"url": url})
-                if attempt < self.max_retries:
-                    await asyncio.sleep(self.retry_delay * (2**attempt))
-                    continue
-                break
-
             except Exception as e:
-                # Catch-all for other connection issues
-                error_msg = str(e).lower()
-                if any(
-                    term in error_msg
-                    for term in ["connection", "network", "refused", "unreachable"]
-                ):
+                # Classify and handle the exception
+                exception_type = classify_request_exception(e)
+
+                if exception_type == "timeout":
+                    last_exception = TimeoutError(
+                        f"Request timed out after {self.timeout}s", {"url": url}
+                    )
+                elif exception_type == "network":
                     last_exception = NetworkError(
                         f"Network error: {str(e)}", {"url": url}
                     )
@@ -135,6 +119,12 @@ class RemoteMDConverter(SyncConverterMixin):
                     last_exception = ConversionError(
                         f"Unexpected error: {str(e)}", {"url": url}
                     )
+
+                # Check if we should retry
+                if should_retry_request(attempt, self.max_retries, e):
+                    delay = calculate_retry_delay(attempt, self.retry_delay)
+                    await asyncio.sleep(delay)
+                    continue
                 break
 
         if last_exception:
@@ -146,84 +136,22 @@ class RemoteMDConverter(SyncConverterMixin):
         """Handle HTTP error responses and map to appropriate exceptions."""
         try:
             error_data = response.json()
-            if "error" in error_data:
-                error_info = error_data["error"]
-                message = error_info.get("message", f"HTTP {response.status_code}")
-                details = error_info.get("details", {})
-
-                # Map HTTP status codes to SDK exceptions
-                if response.status_code == 400:
-                    raise InvalidInputError(message, details)
-                elif response.status_code == 408:
-                    raise TimeoutError(message, details)
-                elif response.status_code == 413:
-                    raise InvalidInputError(f"File too large: {message}", details)
-                elif response.status_code == 415:
-                    raise InvalidInputError(f"Unsupported format: {message}", details)
-                else:
-                    raise ConversionError(
-                        f"Server error ({response.status_code}): {message}", details
-                    )
-            else:
-                raise ConversionError(f"HTTP {response.status_code}: {response.text}")
-
         except (ValueError, KeyError):
-            # Response is not valid JSON or doesn't have expected structure
-            raise ConversionError(f"HTTP {response.status_code}: {response.text}")
+            error_data = {}
 
-    def _parse_response(self, response_data: Dict[str, Any]) -> ConversionResult:
-        """Parse API response to ConversionResult."""
-        if not response_data.get("success", False):
-            error = response_data.get("error", {})
-            raise ConversionError(
-                error.get("message", "Unknown error"), error.get("details", {})
-            )
-
-        metadata_data = response_data.get("metadata", {})
-        metadata = ConversionMetadata(
-            source_type=metadata_data.get("source_type", "unknown"),
-            source_size=metadata_data.get("source_size", 0),
-            markdown_size=metadata_data.get("markdown_size", 0),
-            processing_time=metadata_data.get("conversion_time_ms", 0) / 1000.0,
-            detected_format=metadata_data.get("detected_format", "unknown"),
-            warnings=metadata_data.get("warnings", []),
+        exception = parse_http_error_response(
+            error_data, response.status_code, response.text
         )
-
-        return ConversionResult(
-            markdown=response_data.get("markdown", ""),
-            metadata=metadata,
-            success=True,
-            request_id=response_data.get("request_id", ""),
-        )
-
-    def _merge_options(self, **options) -> Dict[str, Any]:
-        """Merge conversion options into request format."""
-        request_options = {}
-
-        # Map SDK options to API options
-        option_mapping = {
-            "js_rendering": "js_rendering",
-            "extract_images": "extract_images",
-            "ocr_enabled": "ocr_enabled",
-            "preserve_formatting": "preserve_formatting",
-            "clean_markdown": "clean_markdown",
-            "timeout": "timeout",
-        }
-
-        for sdk_key, api_key in option_mapping.items():
-            if sdk_key in options and options[sdk_key] is not None:
-                request_options[api_key] = options[sdk_key]
-
-        return {"options": request_options} if request_options else {}
+        raise exception
 
     async def convert_file(
         self, file_path: Union[str, Path], **options
     ) -> ConversionResult:
         """Convert a local file using remote API."""
-        path = Path(file_path)
+        path = validate_file_path(str(file_path))
+
         if not path.exists():
             raise InvalidInputError(f"File not found: {file_path}")
-
         if not path.is_file():
             raise InvalidInputError(f"Path is not a file: {file_path}")
 
@@ -239,9 +167,22 @@ class RemoteMDConverter(SyncConverterMixin):
     async def convert_url(self, url: str, **options) -> ConversionResult:
         """Convert a URL using remote API."""
         if not url or not isinstance(url, str):
-            raise InvalidInputError("URL must be a non-empty string")
+            raise InvalidInputError("URL cannot be empty")
 
-        request_data = {"url": url, **self._merge_options(**options)}
+        url = url.strip()
+        if not url:
+            raise InvalidInputError("URL cannot be empty")
+
+        # Basic URL format validation
+        if "://" not in url:
+            raise InvalidInputError("Invalid URL format")
+
+        # Check protocol
+        if not (url.startswith("http://") or url.startswith("https://")):
+            raise InvalidInputError("Only HTTP/HTTPS URLs allowed")
+
+        request_options = merge_request_options({}, options)
+        request_data = build_url_payload(url, request_options)
 
         response = await self._make_request_with_retry(
             "POST",
@@ -250,7 +191,7 @@ class RemoteMDConverter(SyncConverterMixin):
             headers={"Content-Type": "application/json"},
         )
 
-        return self._parse_response(response.json())
+        return parse_conversion_response(response.json())
 
     async def convert_content(
         self, content: bytes, filename: Optional[str] = None, **options
@@ -262,13 +203,10 @@ class RemoteMDConverter(SyncConverterMixin):
         if len(content) == 0:
             raise InvalidInputError("Content cannot be empty")
 
-        # Encode content as base64 for JSON transmission
-        encoded_content = base64.b64encode(content).decode("utf-8")
-
-        request_data = {"content": encoded_content, **self._merge_options(**options)}
-
-        if filename:
-            request_data["filename"] = filename
+        request_options = merge_request_options({}, options)
+        request_data = build_file_payload(
+            content, filename or "unknown", request_options
+        )
 
         response = await self._make_request_with_retry(
             "POST",
@@ -277,7 +215,7 @@ class RemoteMDConverter(SyncConverterMixin):
             headers={"Content-Type": "application/json"},
         )
 
-        return self._parse_response(response.json())
+        return parse_conversion_response(response.json())
 
     async def convert_text(
         self, text: str, mime_type: str, **options
@@ -290,13 +228,18 @@ class RemoteMDConverter(SyncConverterMixin):
             raise InvalidInputError("Text cannot be empty")
 
         if not mime_type or not isinstance(mime_type, str):
-            raise InvalidInputError("MIME type must be a non-empty string")
+            raise InvalidInputError("MIME type cannot be empty")
 
-        request_data = {
-            "text": text,
-            "mime_type": mime_type,
-            **self._merge_options(**options),
-        }
+        mime_type = mime_type.strip()
+        if not mime_type:
+            raise InvalidInputError("MIME type cannot be empty")
+
+        # Basic MIME type validation
+        if "/" not in mime_type:
+            raise InvalidInputError("MIME type must contain '/'")
+
+        request_options = merge_request_options({}, options)
+        request_data = build_text_payload(text, mime_type, request_options)
 
         response = await self._make_request_with_retry(
             "POST",
@@ -305,7 +248,7 @@ class RemoteMDConverter(SyncConverterMixin):
             headers={"Content-Type": "application/json"},
         )
 
-        return self._parse_response(response.json())
+        return parse_conversion_response(response.json())
 
     async def health_check(self) -> Dict[str, Any]:
         """Check the health of the remote server."""
