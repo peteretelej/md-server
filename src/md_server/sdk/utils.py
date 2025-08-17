@@ -132,7 +132,7 @@ def detect_format_from_content(content: bytes, filename: Optional[str] = None) -
         format_map = {
             ".pdf": "application/pdf",
             ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             ".html": "text/html",
             ".htm": "text/html",

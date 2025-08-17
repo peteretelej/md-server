@@ -3,13 +3,12 @@ URL conversion functionality for the SDK.
 """
 
 import asyncio
-import logging
 from typing import Optional
 
 from markitdown import MarkItDown
 
 from .config import get_logger
-from .exceptions import NetworkError, InvalidInputError
+from .exceptions import NetworkError
 from .validators import URLValidator
 
 logger = get_logger("url_converter")
@@ -26,8 +25,14 @@ class URLConverter:
     def _check_browser_availability(self) -> bool:
         """Check if browser support (Crawl4AI) is available."""
         try:
-            import crawl4ai
-            return True
+            import importlib.util
+
+            available = importlib.util.find_spec("crawl4ai") is not None
+            if not available:
+                logger.debug(
+                    "Crawl4AI not available, using MarkItDown for URL conversion"
+                )
+            return available
         except ImportError:
             logger.debug("Crawl4AI not available, using MarkItDown for URL conversion")
             return False
@@ -35,16 +40,22 @@ class URLConverter:
     async def convert_url(self, url: str, js_rendering: Optional[bool] = None) -> str:
         """Convert URL to markdown with browser or MarkItDown fallback."""
         validated_url = URLValidator.validate_url(url)
-        
-        logger.info("Converting URL: %s (browser_available=%s, js_rendering=%s)", 
-                   validated_url, self._browser_available, js_rendering)
+
+        logger.info(
+            "Converting URL: %s (browser_available=%s, js_rendering=%s)",
+            validated_url,
+            self._browser_available,
+            js_rendering,
+        )
 
         if self._browser_available and js_rendering:
             try:
                 return await self._crawl_with_browser(validated_url)
             except Exception as e:
-                logger.warning("Browser crawling failed, falling back to MarkItDown: %s", e)
-        
+                logger.warning(
+                    "Browser crawling failed, falling back to MarkItDown: %s", e
+                )
+
         return await self._convert_with_markitdown(validated_url)
 
     async def _crawl_with_browser(self, url: str) -> str:
@@ -82,11 +93,11 @@ class URLConverter:
     async def _convert_with_markitdown(self, url: str) -> str:
         """Fallback URL conversion using MarkItDown."""
         loop = asyncio.get_event_loop()
-        
+
         try:
             return await asyncio.wait_for(
                 loop.run_in_executor(None, self._sync_convert_url_with_markitdown, url),
-                timeout=self.timeout
+                timeout=self.timeout,
             )
         except asyncio.TimeoutError:
             raise NetworkError(f"URL conversion timed out after {self.timeout}s")

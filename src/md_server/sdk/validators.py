@@ -16,7 +16,7 @@ class URLValidator:
         """Validate URL format for document conversion."""
         if not url or not url.strip():
             raise InvalidInputError("URL cannot be empty")
-            
+
         url = url.strip()
         parsed = urlparse(url)
 
@@ -36,9 +36,15 @@ class FileSizeValidator:
 
     FORMAT_LIMITS = {
         "application/pdf": 50 * 1024 * 1024,  # 50MB for PDFs
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": 25 * 1024 * 1024,  # 25MB for DOCX
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation": 25 * 1024 * 1024,  # 25MB for PPTX
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": 25 * 1024 * 1024,  # 25MB for XLSX
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": 25
+        * 1024
+        * 1024,  # 25MB for DOCX
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": 25
+        * 1024
+        * 1024,  # 25MB for PPTX
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": 25
+        * 1024
+        * 1024,  # 25MB for XLSX
         "text/plain": 10 * 1024 * 1024,  # 10MB for text
         "text/html": 10 * 1024 * 1024,  # 10MB for HTML
         "text/markdown": 10 * 1024 * 1024,  # 10MB for markdown
@@ -50,10 +56,10 @@ class FileSizeValidator:
 
     @classmethod
     def validate_size(
-        cls, 
-        content_size: int, 
+        cls,
+        content_size: int,
         content_type: Optional[str] = None,
-        max_size_mb: Optional[int] = None
+        max_size_mb: Optional[int] = None,
     ) -> None:
         """Validate content size against limits."""
         if content_size <= 0:
@@ -70,7 +76,11 @@ class FileSizeValidator:
             actual_mb = content_size / (1024 * 1024)
             raise FileSizeError(
                 f"File size {actual_mb:.1f}MB exceeds limit of {limit_mb:.0f}MB for {content_type or 'this format'}",
-                {"file_size": content_size, "limit": limit, "content_type": content_type}
+                {
+                    "file_size": content_size,
+                    "limit": limit,
+                    "content_type": content_type,
+                },
             )
 
 
@@ -136,7 +146,9 @@ class ContentValidator:
         return "application/octet-stream"
 
     @classmethod
-    def validate_content_type(cls, content: bytes, declared_type: Optional[str] = None) -> str:
+    def validate_content_type(
+        cls, content: bytes, declared_type: Optional[str] = None
+    ) -> str:
         """Validate that declared content type matches detected type."""
         detected_type = cls.detect_content_type(content)
 
@@ -146,7 +158,7 @@ class ContentValidator:
         # Handle Office documents (ZIP-based)
         if detected_type == "application/zip" and declared_type in [
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation", 
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ]:
             return declared_type
@@ -157,13 +169,13 @@ class ContentValidator:
         # For text types, be more permissive as detection can be inaccurate
         if declared_type.startswith("text/") and detected_type == "text/plain":
             return declared_type
-            
+
         # Strict matching for security-sensitive binary types only
         security_sensitive = ["application/pdf", "image/png", "image/jpeg"]
         if declared_type in security_sensitive and detected_type != declared_type:
             raise UnsupportedFormatError(
                 f"Content type mismatch: declared {declared_type} but detected {detected_type}",
-                {"declared": declared_type, "detected": detected_type}
+                {"declared": declared_type, "detected": detected_type},
             )
 
         return declared_type
