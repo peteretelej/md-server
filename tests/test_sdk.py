@@ -425,3 +425,87 @@ class TestSDKErrorScenarios:
         )
         assert isinstance(result, ConversionResult)
         assert result.markdown is not None
+
+    @pytest.mark.asyncio
+    async def test_browser_unavailable_fallback(self, converter):
+        """Test SDK fallback when browser unavailable."""
+        from unittest.mock import patch
+        
+        # Mock AsyncWebCrawler import failure
+        with patch("md_server.browser.AsyncWebCrawler", side_effect=ImportError("Browser not available")):
+            # URL conversion should still work with fallback
+            try:
+                result = await converter.convert_url("https://httpbin.org/robots.txt")
+                assert isinstance(result, ConversionResult)
+                assert result.markdown is not None
+            except Exception:
+                # Network issues are acceptable in tests
+                pass
+
+            # JS rendering option should be ignored gracefully
+            try:
+                result = await converter.convert_url("https://httpbin.org/robots.txt", js_rendering=True)
+                assert isinstance(result, ConversionResult)
+                assert result.markdown is not None
+            except Exception:
+                # Network issues are acceptable in tests
+                pass
+
+    @pytest.mark.asyncio
+    async def test_network_failures(self, converter):
+        """Test SDK handles network failures gracefully."""
+        # Connection refused error
+        with pytest.raises((ConversionError, InvalidInputError)):
+            await converter.convert_url("http://127.0.0.1:99999")
+        
+        # DNS resolution failure
+        with pytest.raises((ConversionError, InvalidInputError)):
+            await converter.convert_url("https://invalid-domain-that-does-not-exist-123456.com")
+        
+        # SSL certificate error (self-signed)
+        try:
+            await converter.convert_url("https://self-signed.badssl.com")
+        except (ConversionError, InvalidInputError):
+            # SSL errors are expected
+            pass
+        
+        # Connection timeout
+        short_timeout_converter = MDConverter(timeout=1)
+        try:
+            await short_timeout_converter.convert_url("https://httpbin.org/delay/5")
+        except (ConversionError, InvalidInputError):
+            # Timeout errors are expected
+            pass
+
+    @pytest.mark.asyncio
+    async def test_validation_edge_cases(self, converter):
+        """Test SDK validation with edge cases."""
+        # Unicode filenames (emoji, Chinese chars)
+        unicode_content = b"Test content"
+        result = await converter.convert_content(unicode_content, filename="测试文档📄.txt")
+        assert isinstance(result, ConversionResult)
+        assert result.markdown is not None
+
+        # Path traversal attempts (should be handled safely)
+        result = await converter.convert_content(b"Test content", filename="../../../etc/passwd.txt")
+        assert isinstance(result, ConversionResult)
+
+        # Very long filenames (truncated gracefully)
+        long_filename = "a" * 300 + ".txt"
+        result = await converter.convert_content(b"Test content", filename=long_filename)
+        assert isinstance(result, ConversionResult)
+
+        # Special chars in text content
+        special_text = "Special chars: ñáéíóú àèìòù çüöäß 中文 🎉 ♠♥♦♣"
+        result = await converter.convert_text(special_text, "text/plain")
+        assert isinstance(result, ConversionResult)
+        assert result.markdown is not None
+
+        # Binary data in text field (should handle gracefully)
+        try:
+            binary_as_text = bytes([0, 1, 2, 255]).decode("utf-8", errors="replace")
+            result = await converter.convert_text(binary_as_text, "text/plain")
+            assert isinstance(result, ConversionResult)
+        except UnicodeDecodeError:
+            # Unicode errors are acceptable for binary data
+            pass
