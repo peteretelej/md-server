@@ -509,3 +509,99 @@ class TestSDKErrorScenarios:
         except UnicodeDecodeError:
             # Unicode errors are acceptable for binary data
             pass
+
+    def test_model_validation_errors(self):
+        """Test model validation error paths."""
+        from md_server.models import ConvertRequest, ConversionOptions
+        
+        # Test 1: ConvertRequest with no input fields
+        with pytest.raises(ValueError, match="One of url, content, or text must be provided"):
+            ConvertRequest()
+        
+        # Test 2: ConvertRequest with multiple input fields
+        with pytest.raises(ValueError, match="Only one of url, content, or text can be provided"):
+            ConvertRequest(url="https://example.com", text="content", content="base64content")
+        
+        # Test 3: ConvertRequest with two input fields
+        with pytest.raises(ValueError, match="Only one of url, content, or text can be provided"):
+            ConvertRequest(url="https://example.com", text="content")
+        
+        # Test 4: Valid ConvertRequest with url
+        request = ConvertRequest(url="https://example.com")
+        assert request.url == "https://example.com"
+        assert request.text is None
+        assert request.content is None
+        
+        # Test 5: Valid ConvertRequest with text
+        request = ConvertRequest(text="content")
+        assert request.text == "content"
+        assert request.url is None
+        assert request.content is None
+        
+        # Test 6: Valid ConvertRequest with content
+        request = ConvertRequest(content="base64content")
+        assert request.content == "base64content"
+        assert request.url is None
+        assert request.text is None
+        
+        # Test 7: ConversionOptions with various field types
+        options = ConversionOptions(
+            js_rendering=True,
+            timeout=30,
+            extract_images=False,
+            preserve_formatting=True,
+            ocr_enabled=False,
+            max_length=1000,
+            clean_markdown=True
+        )
+        assert options.js_rendering is True
+        assert options.timeout == 30
+        assert options.extract_images is False
+
+    def test_sync_wrapper_edge_cases(self):
+        """Test sync wrapper edge cases - event loop handling."""
+        import asyncio
+        from md_server.sdk.core.sync_wrappers import sync_convert_text, sync_convert_url, sync_convert_content
+        
+        # Test 1: Basic sync wrapper functionality
+        result = sync_convert_text("# Test", "text/markdown")
+        assert result.markdown is not None
+        assert isinstance(result, ConversionResult)
+        
+        # Test 2: Sync wrapper with URL (might fail in test environment)
+        try:
+            result = sync_convert_url("https://example.com")
+            assert isinstance(result, ConversionResult)
+        except (ConversionError, InvalidInputError):
+            # Network errors are acceptable in test environment
+            pass
+        
+        # Test 3: Sync wrapper with content
+        content = b"Test content for sync wrapper"
+        result = sync_convert_content(content, filename="test.txt")
+        assert isinstance(result, ConversionResult)
+        assert result.markdown is not None
+        
+        # Test 4: Sync wrapper error handling
+        try:
+            sync_convert_url("invalid-url")
+        except (ConversionError, InvalidInputError) as e:
+            assert str(e) is not None
+        
+        # Test 5: Event loop handling in sync context
+        # This tests that sync wrappers work even when called from different contexts
+        def run_in_thread():
+            return sync_convert_text("Thread test", "text/plain")
+        
+        import threading
+        result_holder = []
+        
+        def thread_target():
+            result_holder.append(run_in_thread())
+        
+        thread = threading.Thread(target=thread_target)
+        thread.start()
+        thread.join()
+        
+        assert len(result_holder) == 1
+        assert isinstance(result_holder[0], ConversionResult)
