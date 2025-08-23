@@ -63,10 +63,10 @@ class TestSDKDirectUsage:
         assert "pdf" in result.metadata.detected_format.lower()
 
     @pytest.mark.asyncio
-    async def test_local_converter_url(self, converter):
+    async def test_local_converter_url(self, converter, http_test_server):
         """Test SDK URL conversion - web content processing."""
-        # Use a simple, reliable URL
-        test_url = "https://httpbin.org/robots.txt"
+        # Use a simple, reliable URL from local test server
+        test_url = f"{http_test_server}/robots.txt"
 
         try:
             result = await converter.convert_url(test_url)
@@ -182,11 +182,11 @@ class TestSDKDirectUsage:
             pass
 
     @pytest.mark.asyncio
-    async def test_browser_detection(self, converter):
+    async def test_browser_detection(self, converter, http_test_server):
         """Test browser capability impact - JavaScript handling."""
         # Test that converter can handle URLs regardless of browser availability
         # This tests the browser detection and fallback logic
-        simple_url = "https://httpbin.org/robots.txt"
+        simple_url = f"{http_test_server}/robots.txt"
 
         try:
             result = await converter.convert_url(simple_url)
@@ -387,7 +387,7 @@ class TestSDKErrorScenarios:
             assert len(str(e)) > 0
 
     @pytest.mark.asyncio
-    async def test_timeout_handling(self, converter):
+    async def test_timeout_handling(self, converter, http_test_server):
         """Test SDK timeout handling."""
         # Use very short timeout
         short_timeout_converter = MDConverter(timeout=1)
@@ -395,7 +395,7 @@ class TestSDKErrorScenarios:
         # This might timeout or succeed depending on network speed
         try:
             result = await short_timeout_converter.convert_url(
-                "https://httpbin.org/delay/5"
+                f"{http_test_server}/delay.html"
             )
             # If it succeeds, that's fine
             assert isinstance(result, ConversionResult)
@@ -427,7 +427,7 @@ class TestSDKErrorScenarios:
         assert result.markdown is not None
 
     @pytest.mark.asyncio
-    async def test_browser_unavailable_fallback(self, converter):
+    async def test_browser_unavailable_fallback(self, converter, http_test_server):
         """Test SDK fallback when browser unavailable."""
         from unittest.mock import patch
 
@@ -438,7 +438,7 @@ class TestSDKErrorScenarios:
         ):
             # URL conversion should still work with fallback
             try:
-                result = await converter.convert_url("https://httpbin.org/robots.txt")
+                result = await converter.convert_url(f"{http_test_server}/robots.txt")
                 assert isinstance(result, ConversionResult)
                 assert result.markdown is not None
             except Exception:
@@ -448,7 +448,7 @@ class TestSDKErrorScenarios:
             # JS rendering option should be ignored gracefully
             try:
                 result = await converter.convert_url(
-                    "https://httpbin.org/robots.txt", js_rendering=True
+                    f"{http_test_server}/robots.txt", js_rendering=True
                 )
                 assert isinstance(result, ConversionResult)
                 assert result.markdown is not None
@@ -457,7 +457,7 @@ class TestSDKErrorScenarios:
                 pass
 
     @pytest.mark.asyncio
-    async def test_network_failures(self, converter):
+    async def test_network_failures(self, converter, http_test_server):
         """Test SDK handles network failures gracefully."""
         # Connection refused error
         with pytest.raises((ConversionError, InvalidInputError)):
@@ -479,7 +479,7 @@ class TestSDKErrorScenarios:
         # Connection timeout
         short_timeout_converter = MDConverter(timeout=1)
         try:
-            await short_timeout_converter.convert_url("https://httpbin.org/delay/5")
+            await short_timeout_converter.convert_url(f"{http_test_server}/delay.html")
         except (ConversionError, InvalidInputError):
             # Timeout errors are expected
             pass

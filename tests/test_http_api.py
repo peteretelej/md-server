@@ -64,9 +64,9 @@ class TestHTTPAPI:
         assert data["metadata"]["source_type"] == "docx"
         assert "request_id" in data
 
-    def test_convert_url(self, client):
+    def test_convert_url(self, client, http_test_server):
         """Test URL conversion - critical web functionality."""
-        payload = {"url": "https://httpbin.org/robots.txt"}
+        payload = {"url": f"{http_test_server}/robots.txt"}
 
         response = client.post("/convert", json=payload)
 
@@ -477,10 +477,10 @@ class TestErrorScenarios:
             data = response.json()
             assert "detail" in data  # Litestar error format
 
-    def test_network_timeout_handling(self, client):
+    def test_network_timeout_handling(self, client, http_test_server):
         """Test timeout handling for slow URLs."""
         payload = {
-            "url": "https://httpbin.org/delay/30",  # 30 second delay
+            "url": f"{http_test_server}/delay.html",  # 2 second delay from our test server
             "options": {"timeout": 1},  # 1 second timeout
         }
 

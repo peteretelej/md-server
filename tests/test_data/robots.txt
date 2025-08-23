@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# This is a test robots.txt file for local testing
+# It replaces external httpbin.org calls
+Crawl-delay: 1

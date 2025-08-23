@@ -155,13 +155,13 @@ class TestFormatSupport:
         assert isinstance(capabilities["browser_available"], bool)
 
     @pytest.mark.asyncio
-    async def test_capability_impact_on_conversion(self):
+    async def test_capability_impact_on_conversion(self, http_test_server):
         """Test how capabilities impact conversion results"""
         converter = MDConverter()
 
         # Test URL conversion (may use browser if available)
         try:
-            result = await converter.convert_url("https://httpbin.org/html")
+            result = await converter.convert_url(f"{http_test_server}/simple.html")
             # Should handle URL conversion appropriately based on capabilities
             assert isinstance(result.success, bool)
         except Exception:
@@ -302,10 +302,10 @@ class TestBrowserCapabilityIntegration:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_url_conversion_with_without_browser(self):
+    async def test_url_conversion_with_without_browser(self, http_test_server):
         """Test URL conversion behavior with and without browser availability."""
         converter = MDConverter()
-        test_url = "https://httpbin.org/robots.txt"
+        test_url = f"{http_test_server}/robots.txt"
 
         # Test with browser available (mocked)
         with patch("md_server.browser.AsyncWebCrawler") as mock_crawler:
@@ -370,7 +370,7 @@ class TestBrowserCapabilityIntegration:
         assert result.markdown is not None
 
     @pytest.mark.asyncio
-    async def test_connection_timeout_and_retry_logic(self):
+    async def test_connection_timeout_and_retry_logic(self, http_test_server):
         """Test connection timeout and retry logic for browser operations."""
         from unittest.mock import AsyncMock, patch
         import asyncio
@@ -387,7 +387,7 @@ class TestBrowserCapabilityIntegration:
 
             try:
                 result = await converter.convert_url(
-                    "https://example.com", js_rendering=True
+                    f"{http_test_server}/simple.html", js_rendering=True
                 )
                 # Should either succeed with fallback or raise appropriate error
                 assert isinstance(result, ConversionResult) or True
@@ -408,7 +408,7 @@ class TestBrowserCapabilityIntegration:
 
             try:
                 result = await converter.convert_url(
-                    "https://example.com", js_rendering=True
+                    f"{http_test_server}/simple.html", js_rendering=True
                 )
                 # Should handle retry gracefully
                 assert isinstance(result, ConversionResult) or True

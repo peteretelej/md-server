@@ -4,6 +4,9 @@ import socket
 import subprocess
 import sys
 import time
+import threading
+import http.server
+import socketserver
 import pytest
 import requests
 from pathlib import Path
@@ -161,6 +164,63 @@ def sample_html(test_data_dir: Path) -> Path:
 def sample_image(test_data_dir: Path) -> Path:
     """Return path to sample image file."""
     return test_data_dir / "test.jpg"
+
+
+class DelayedHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    """HTTP handler that adds delays for timeout testing."""
+    
+    def do_GET(self):
+        if self.path == "/delay.html":
+            # Add a 2-second delay for timeout testing
+            time.sleep(2)
+        super().do_GET()
+
+
+@pytest.fixture(scope="session")
+def http_test_server() -> Generator[str, None, None]:
+    """Session-scoped HTTP server serving test files from test_data directory."""
+    test_data_dir = Path(__file__).parent / "test_data"
+    
+    # Change to test_data directory for serving files
+    original_cwd = os.getcwd()
+    os.chdir(test_data_dir)
+    
+    try:
+        port = find_free_port()
+        handler = DelayedHTTPRequestHandler
+        
+        with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
+            # Start server in background thread
+            server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+            server_thread.start()
+            
+            # Wait for server to be ready
+            server_url = f"http://127.0.0.1:{port}"
+            server_ready = False
+            
+            for attempt in range(10):  # 10 second timeout
+                time.sleep(0.5)
+                try:
+                    response = requests.get(f"{server_url}/simple.html", timeout=1)
+                    if response.status_code == 200:
+                        server_ready = True
+                        break
+                except requests.exceptions.RequestException:
+                    pass
+            
+            if not server_ready:
+                httpd.shutdown()
+                raise RuntimeError(f"HTTP test server failed to start on port {port}")
+            
+            yield server_url
+            
+            # Cleanup
+            httpd.shutdown()
+            server_thread.join(timeout=5)
+    
+    finally:
+        # Restore original working directory
+        os.chdir(original_cwd)
 
 
 # Event loop fixture for async tests
