@@ -16,9 +16,11 @@ from .core import (
     build_url_payload,
     build_text_payload,
     parse_conversion_response,
-    build_auth_headers,
     merge_request_options,
     parse_http_error_response,
+)
+from .core.utils import (
+    build_auth_headers,
     should_retry_request,
     calculate_retry_delay,
     classify_request_exception,

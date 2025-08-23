@@ -6,7 +6,7 @@ authentication without I/O dependencies.
 """
 
 import base64
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Tuple
 
 from ..models import ConversionResult, ConversionMetadata
 from ..exceptions import ConversionError
@@ -121,12 +121,6 @@ def merge_request_options(
     return {"options": request_options} if request_options else {}
 
 
-def build_auth_headers(api_key: Optional[str]) -> Dict[str, str]:
-    """Build authentication headers."""
-    headers = {"User-Agent": "md-server-sdk/1.0", "Accept": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    return headers
 
 
 def encode_file_content(content: bytes) -> str:
@@ -170,46 +164,3 @@ def parse_http_error_response(
         return ConversionError(f"HTTP {status_code}: {response_text}")
 
 
-def should_retry_request(attempt: int, max_retries: int, exception: Exception) -> bool:
-    """Determine if request should be retried based on attempt count and exception type."""
-    import httpx
-
-    if attempt >= max_retries:
-        return False
-
-    # Retry on network errors and timeouts, but not on client errors
-    retry_exceptions = (
-        httpx.TimeoutException,
-        httpx.NetworkError,
-        httpx.ConnectError,
-        ConnectionError,
-        OSError,
-    )
-
-    return isinstance(exception, retry_exceptions)
-
-
-def calculate_retry_delay(attempt: int, base_delay: float) -> float:
-    """Calculate exponential backoff delay for retry attempts."""
-    return base_delay * (2**attempt)
-
-
-def classify_request_exception(exception: Exception) -> str:
-    """Classify exception type for error handling logic."""
-    import httpx
-
-    error_msg = str(exception).lower()
-
-    if isinstance(exception, httpx.TimeoutException):
-        return "timeout"
-    elif isinstance(
-        exception, (httpx.NetworkError, httpx.ConnectError, ConnectionError, OSError)
-    ):
-        return "network"
-    elif any(
-        term in error_msg
-        for term in ["connection", "network", "refused", "unreachable"]
-    ):
-        return "network"
-    else:
-        return "unknown"

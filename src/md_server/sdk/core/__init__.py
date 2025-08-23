@@ -14,10 +14,13 @@ from .remote import (
     validate_api_response,
     extract_error_details,
     merge_request_options,
-    build_auth_headers,
     encode_file_content,
     map_status_code_to_exception,
     parse_http_error_response,
+)
+
+from .utils import (
+    build_auth_headers,
     should_retry_request,
     calculate_retry_delay,
     classify_request_exception,

@@ -4,11 +4,6 @@ from litestar.response import Response
 from litestar.exceptions import HTTPException
 from litestar.status_codes import (
     HTTP_200_OK,
-    HTTP_400_BAD_REQUEST,
-    HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-    HTTP_408_REQUEST_TIMEOUT,
-    HTTP_500_INTERNAL_SERVER_ERROR,
-    HTTP_413_REQUEST_ENTITY_TOO_LARGE,
 )
 import base64
 import time
@@ -27,6 +22,7 @@ from .sdk.exceptions import (
     UnsupportedFormatError,
 )
 from .core.config import Settings
+from .core.error_mapper import map_conversion_error, map_value_error, map_generic_error, calculate_source_size
 from .detection import ContentTypeDetector
 
 
@@ -168,123 +164,36 @@ class ConvertController(Controller):
 
     def _handle_sdk_error(self, error) -> Response[ErrorResponse]:
         """Handle SDK exceptions and map to HTTP responses"""
-        if isinstance(error, InvalidInputError):
-            error_response = ErrorResponse.create_error(
-                code="INVALID_INPUT",
-                message=str(error),
-                details=error.details,
-                suggestions=["Check input format", "Verify request structure"],
-            )
-            status_code = HTTP_400_BAD_REQUEST
-
-        elif isinstance(error, FileSizeError):
-            error_response = ErrorResponse.create_error(
-                code="FILE_TOO_LARGE",
-                message=str(error),
-                details=error.details,
-                suggestions=["Use a smaller file", "Check size limits at /formats"],
-            )
-            status_code = HTTP_413_REQUEST_ENTITY_TOO_LARGE
-
-        elif isinstance(error, UnsupportedFormatError):
-            error_response = ErrorResponse.create_error(
-                code="UNSUPPORTED_FORMAT",
-                message=str(error),
-                details=error.details,
-                suggestions=["Check supported formats at /formats"],
-            )
-            status_code = HTTP_415_UNSUPPORTED_MEDIA_TYPE
-
-        elif isinstance(error, TimeoutError):
-            error_response = ErrorResponse.create_error(
-                code="TIMEOUT",
-                message=str(error),
-                details=error.details,
-                suggestions=["Try with a smaller file", "Increase timeout in options"],
-            )
-            status_code = HTTP_408_REQUEST_TIMEOUT
-
-        elif isinstance(error, NetworkError):
-            error_response = ErrorResponse.create_error(
-                code="NETWORK_ERROR",
-                message=str(error),
-                details=error.details,
-                suggestions=["Check URL accessibility", "Verify network connectivity"],
-            )
-            status_code = HTTP_400_BAD_REQUEST
-
-        else:  # ConversionError or generic
-            error_response = ErrorResponse.create_error(
-                code="CONVERSION_FAILED",
-                message=str(error),
-                details=getattr(error, "details", {}),
-                suggestions=["Check input format", "Contact support if issue persists"],
-            )
-            status_code = HTTP_500_INTERNAL_SERVER_ERROR
-
+        code, message, status_code, suggestions = map_conversion_error(error)
+        error_response = ErrorResponse.create_error(
+            code=code,
+            message=message,
+            details=getattr(error, "details", {}),
+            suggestions=suggestions,
+        )
         raise HTTPException(status_code=status_code, detail=error_response.model_dump())
 
     def _handle_value_error(self, error_msg: str) -> None:
         """Handle ValueError with specific error type detection"""
-        error_mappings = [
-            (
-                ["size", "exceeds"],
-                "FILE_TOO_LARGE",
-                HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                ["Use a smaller file", "Check size limits at /formats"],
-            ),
-            (
-                ["not allowed", "blocked"],
-                "INVALID_URL",
-                HTTP_400_BAD_REQUEST,
-                ["Use a public URL", "Avoid private IP addresses"],
-            ),
-            (
-                ["content type mismatch"],
-                "INVALID_CONTENT",
-                HTTP_400_BAD_REQUEST,
-                ["Ensure file matches declared content type"],
-            ),
-        ]
-
-        for keywords, code, status_code, suggestions in error_mappings:
-            if any(keyword in error_msg.lower() for keyword in keywords):
-                error_response = ErrorResponse.create_error(
-                    code=code, message=error_msg, suggestions=suggestions
-                )
-                raise HTTPException(
-                    status_code=status_code, detail=error_response.model_dump()
-                )
-
-        # Default ValueError handling
+        code, status_code, suggestions = map_value_error(error_msg)
         error_response = ErrorResponse.create_error(
-            code="INVALID_INPUT",
-            message=error_msg,
-            suggestions=["Check input format", "Verify JSON structure"],
+            code=code, message=error_msg, suggestions=suggestions
         )
         raise HTTPException(
-            status_code=HTTP_400_BAD_REQUEST, detail=error_response.model_dump()
+            status_code=status_code, detail=error_response.model_dump()
         )
 
     def _handle_generic_error(self, error_msg: str, format_type: str = None) -> None:
         """Handle generic exceptions"""
-        if "unsupported" in error_msg.lower():
-            error_response = ErrorResponse.create_error(
-                code="UNSUPPORTED_FORMAT",
-                message=error_msg,
-                details={"detected_format": format_type} if format_type else None,
-                suggestions=["Check supported formats at /formats"],
-            )
-            raise HTTPException(
-                status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=error_response.model_dump(),
-            )
-
+        code, status_code, details, suggestions = map_generic_error(error_msg, format_type)
         error_response = ErrorResponse.create_error(
-            code="CONVERSION_FAILED", message=f"Conversion failed: {error_msg}"
+            code=code,
+            message=f"Conversion failed: {error_msg}",
+            details=details,
+            suggestions=suggestions
         )
         raise HTTPException(
-            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status_code,
             detail=error_response.model_dump(),
         )
 
@@ -292,15 +201,4 @@ class ConvertController(Controller):
         self, input_type: str, content_data: dict, request_data: dict
     ) -> int:
         """Calculate source content size (backward compatibility method)"""
-        if input_type == "json_url":
-            return len(request_data.get("url", "").encode("utf-8"))
-        elif input_type in ["json_text", "json_text_typed"]:
-            return len(request_data.get("text", "").encode("utf-8"))
-        elif input_type == "json_content":
-            try:
-                return len(base64.b64decode(request_data.get("content", "")))
-            except Exception:
-                return 0
-        elif content_data and "content" in content_data:
-            return len(content_data["content"])
-        return 0
+        return calculate_source_size(input_type, content_data, request_data)
