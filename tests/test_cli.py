@@ -340,3 +340,55 @@ class TestCLIUserExperience:
 
             assert kwargs.get("host") == "127.0.0.1"  # Secure default
             assert kwargs.get("port") == 8080  # Standard HTTP port
+
+    def test_cli_startup_failures(self):
+        """Test CLI startup failure scenarios - comprehensive error handling."""
+        # Test 1: Invalid host address
+        with (
+            patch("md_server.__main__.uvicorn.run") as mock_run,
+            patch("md_server.__main__.is_port_available", return_value=True),
+            patch("sys.argv", ["md-server", "--host", "999.999.999.999"]),
+        ):
+            # Mock uvicorn to simulate host resolution failure
+            mock_run.side_effect = OSError("Invalid host address")
+            
+            with pytest.raises(OSError):
+                main()
+
+        # Test 2: Permission denied on privileged port (port 80)
+        with (
+            patch("md_server.__main__.is_port_available", return_value=True),
+            patch("md_server.__main__.uvicorn.run") as mock_run,
+            patch("sys.argv", ["md-server", "--port", "80"]),
+        ):
+            # Mock permission denied error
+            mock_run.side_effect = PermissionError("Permission denied on port 80")
+            
+            with pytest.raises(PermissionError):
+                main()
+
+        # Test 3: Invalid port number (too high)
+        with (
+            patch("builtins.print") as mock_print,
+            patch("sys.argv", ["md-server", "--port", "99999"]),
+        ):
+            # Should raise OverflowError or SystemExit due to invalid port
+            with pytest.raises((SystemExit, OverflowError)):
+                main()
+
+        # Test 4: Invalid port number (negative)
+        with (
+            patch("builtins.print") as mock_print,
+            patch("sys.argv", ["md-server", "--port", "-1"]),
+        ):
+            # Should raise OverflowError due to invalid port
+            with pytest.raises((SystemExit, OverflowError)):
+                main()
+
+        # Test 5: Non-numeric port
+        with patch("sys.argv", ["md-server", "--port", "not-a-number"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            
+            # Should exit with error code for invalid argument
+            assert exc_info.value.code != 0
