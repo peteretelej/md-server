@@ -252,7 +252,6 @@ class TestHTTPAPI:
             assert data["success"] is False
             assert "rate" in data["error"]["code"].lower()
 
-
     def test_upload_binary_file_failures(self, client, test_files):
         """Test binary file upload failure scenarios - comprehensive error handling."""
         # Test 1: Empty file upload
@@ -360,7 +359,9 @@ class TestHTTPAPI:
         # Test PDF size limit (smaller binary)
         large_pdf_fake = b"PDF-" + (b"x" * (5 * 1024 * 1024))  # 5MB fake PDF
         response = client.post(
-            "/convert", content=large_pdf_fake, headers={"Content-Type": "application/pdf"}
+            "/convert",
+            content=large_pdf_fake,
+            headers={"Content-Type": "application/pdf"},
         )
         if response.status_code != 200:
             assert response.status_code in [400, 413, 422]
@@ -419,9 +420,11 @@ class TestHTTPAPI:
         # Test 2: Corrupted ZIP (DOCX/XLSX are ZIP-based)
         fake_zip = b"PK\x03\x04" + b"corrupted-zip-content"
         response = client.post(
-            "/convert", 
-            content=fake_zip, 
-            headers={"Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+            "/convert",
+            content=fake_zip,
+            headers={
+                "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            },
         )
         if response.status_code != 200:
             assert response.status_code in [400, 415, 422, 500]
@@ -515,7 +518,7 @@ class TestErrorScenarios:
         """Test app startup error paths - configuration failures."""
         import os
         from md_server.core.config import get_settings
-        
+
         # Test 1: Invalid environment variables
         old_debug = os.environ.get("MD_SERVER_DEBUG")
         os.environ["MD_SERVER_DEBUG"] = "not-a-boolean"
@@ -569,90 +572,91 @@ class TestErrorScenarios:
         import os
         from litestar.testing import TestClient
         from md_server.app import app
-        
+
         # Test with API key configured
         old_api_key = os.environ.get("MD_SERVER_API_KEY")
         test_api_key = "test-api-key-12345"
         os.environ["MD_SERVER_API_KEY"] = test_api_key
-        
+
         try:
             # Create app with auth enabled
             from md_server.core.config import get_settings
-            from md_server.app import app, create_auth_middleware
-            
+            from md_server.app import app
+
             settings = get_settings()
             if hasattr(settings, "api_key") and settings.api_key:
                 test_client = TestClient(app)
-                
+
                 # Test 1: Valid Bearer token
                 response = test_client.post(
                     "/convert",
                     json={"text": "test", "mime_type": "text/plain"},
-                    headers={"Authorization": f"Bearer {test_api_key}"}
+                    headers={"Authorization": f"Bearer {test_api_key}"},
                 )
                 # Should succeed or fail based on app configuration
                 assert response.status_code in [200, 401, 500]
-                
+
                 # Test 2: Invalid Bearer token
                 response = test_client.post(
                     "/convert",
                     json={"text": "test", "mime_type": "text/plain"},
-                    headers={"Authorization": "Bearer wrong-token"}
+                    headers={"Authorization": "Bearer wrong-token"},
                 )
                 if response.status_code == 401:
                     data = response.json()
                     assert "detail" in data
                     assert "Invalid API key" in str(data.get("detail", ""))
-                
-                # Test 3: Missing Authorization header  
+
+                # Test 3: Missing Authorization header
                 response = test_client.post(
-                    "/convert",
-                    json={"text": "test", "mime_type": "text/plain"}
+                    "/convert", json={"text": "test", "mime_type": "text/plain"}
                 )
                 if response.status_code == 401:
                     data = response.json()
                     assert "detail" in data
                     assert "Missing Authorization header" in str(data.get("detail", ""))
-                
+
                 # Test 4: Non-Bearer auth schemes
                 response = test_client.post(
                     "/convert",
                     json={"text": "test", "mime_type": "text/plain"},
-                    headers={"Authorization": "Basic dXNlcjpwYXNzd29yZA=="}
+                    headers={"Authorization": "Basic dXNlcjpwYXNzd29yZA=="},
                 )
                 if response.status_code == 401:
                     data = response.json()
                     assert "detail" in data
-                    assert "Invalid Authorization header format" in str(data.get("detail", ""))
-                
+                    assert "Invalid Authorization header format" in str(
+                        data.get("detail", "")
+                    )
+
                 # Test 5: Malformed Bearer token
                 response = test_client.post(
                     "/convert",
                     json={"text": "test", "mime_type": "text/plain"},
-                    headers={"Authorization": "Bearer"}
+                    headers={"Authorization": "Bearer"},
                 )
                 if response.status_code == 401:
                     data = response.json()
                     assert "detail" in data
-                
+
                 # Test 6: Auth bypass for /health endpoint
                 response = test_client.get("/health")
                 assert response.status_code == 200
                 data = response.json()
                 assert data["status"] == "healthy"
-                
+
                 # Test 7: Auth bypass for /healthz endpoint
                 response = test_client.get("/healthz")
                 assert response.status_code == 200
                 data = response.json()
                 assert data["status"] == "healthy"
-                
+
                 # Test 8: Auth bypass for /formats endpoint
                 response = test_client.get("/formats")
                 assert response.status_code == 200
                 data = response.json()
                 assert "formats" in data
-                
+
         finally:
             if old_api_key is not None:
                 os.environ["MD_SERVER_API_KEY"] = old_api_key
@@ -662,13 +666,11 @@ class TestErrorScenarios:
     def test_controller_error_branch_coverage(self, client):
         """Test remaining controller error handling branches."""
         # Test _handle_value_error with specific error patterns
-        
+
         # Test 1: Size exceed error branch
         large_content = b"x" * (100 * 1024 * 1024)  # 100MB
         response = client.post(
-            "/convert", 
-            content=large_content, 
-            headers={"Content-Type": "text/plain"}
+            "/convert", content=large_content, headers={"Content-Type": "text/plain"}
         )
         if response.status_code == 413:
             data = response.json()
@@ -688,9 +690,7 @@ class TestErrorScenarios:
         # This is harder to trigger, but we can try sending PDF content with wrong type
         pdf_magic = b"%PDF-1.4\nfake pdf content"
         response = client.post(
-            "/convert", 
-            content=pdf_magic, 
-            headers={"Content-Type": "image/png"}
+            "/convert", content=pdf_magic, headers={"Content-Type": "image/png"}
         )
         # May trigger content type mismatch detection
         if response.status_code == 400:
@@ -703,29 +703,32 @@ class TestErrorScenarios:
         response = client.post(
             "/convert",
             content=fake_content,
-            headers={"Content-Type": "application/x-totally-unsupported"}
+            headers={"Content-Type": "application/x-totally-unsupported"},
         )
         if response.status_code == 415:
             data = response.json()
             assert data["detail"]["error"]["code"] == "UNSUPPORTED_FORMAT"
-            assert "Check supported formats" in str(data["detail"]["error"]["suggestions"])
+            assert "Check supported formats" in str(
+                data["detail"]["error"]["suggestions"]
+            )
 
         # Test 5: Source size calculation branches
         # Test URL source size
         response = client.post("/convert", json={"url": "https://example.com"})
         # Should calculate URL length as source size (if it processes)
-        
+
         # Test base64 content source size
         test_content = b"test content for size calculation"
         b64_content = base64.b64encode(test_content).decode()
-        response = client.post("/convert", json={"content": b64_content, "filename": "test.txt"})
+        response = client.post(
+            "/convert", json={"content": b64_content, "filename": "test.txt"}
+        )
         # Should decode and calculate actual content size
 
         # Test 6: Multipart form error handling
         # Missing file parameter
         response = client.post(
-            "/convert",
-            files={"not_file": ("test.txt", "content", "text/plain")}
+            "/convert", files={"not_file": ("test.txt", "content", "text/plain")}
         )
         assert response.status_code == 400
         data = response.json()
@@ -736,7 +739,7 @@ class TestErrorScenarios:
         response = client.post(
             "/convert",
             content=b"binary content",
-            headers={"Content-Type": "completely/invalid/type/with/too/many/slashes"}
+            headers={"Content-Type": "completely/invalid/type/with/too/many/slashes"},
         )
         # Should handle gracefully
         assert response.status_code in [200, 400, 415, 500]
@@ -753,24 +756,25 @@ class TestErrorScenarios:
         except Exception:
             # Network issues are acceptable in tests
             pass
-        
+
         # Test different detected format mappings
         format_tests = [
             (b"%PDF-1.4\ntest", "application/pdf", "pdf"),
-            (b"<html><body>test</body></html>", "text/html", "html"),  
+            (b"<html><body>test</body></html>", "text/html", "html"),
             (b'{"key": "value"}', "application/json", "json"),
         ]
-        
+
         for content, content_type, expected_source in format_tests:
             response = client.post(
-                "/convert",
-                content=content,
-                headers={"Content-Type": content_type}
+                "/convert", content=content, headers={"Content-Type": content_type}
             )
             if response.status_code == 200:
                 data = response.json()
                 # Should map to appropriate source type
-                assert data["metadata"]["source_type"] in [expected_source, content_type.split('/')[1]]
+                assert data["metadata"]["source_type"] in [
+                    expected_source,
+                    content_type.split("/")[1],
+                ]
                 assert data["metadata"]["detected_format"] == content_type
                 assert isinstance(data["metadata"]["conversion_time_ms"], int)
                 assert data["metadata"]["conversion_time_ms"] >= 0

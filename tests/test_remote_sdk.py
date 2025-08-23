@@ -393,39 +393,41 @@ class TestRemoteSDKEdgeCases:
         """Test remote SDK retry mechanism with various failure scenarios."""
         from unittest.mock import patch, AsyncMock
         import asyncio
-        
+
         # Test first attempt fails, retry succeeds
         with patch("md_server.sdk.core.remote.aiohttp.ClientSession") as mock_session:
             mock_session_instance = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_session_instance
-            
+
             # First call fails, second succeeds
             mock_response = AsyncMock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={
-                "success": True,
-                "markdown": "# Test",
-                "metadata": {"source_type": "text"},
-                "request_id": "test-id"
-            })
-            
+            mock_response.json = AsyncMock(
+                return_value={
+                    "success": True,
+                    "markdown": "# Test",
+                    "metadata": {"source_type": "text"},
+                    "request_id": "test-id",
+                }
+            )
+
             mock_session_instance.post.side_effect = [
                 Exception("Connection failed"),  # First attempt fails
-                mock_response  # Second attempt succeeds
+                mock_response,  # Second attempt succeeds
             ]
-            
+
             converter = RemoteMDConverter(
                 endpoint="http://test.example.com",
                 max_retries=2,
-                retry_delay=0.01  # Fast retry for testing
+                retry_delay=0.01,  # Fast retry for testing
             )
-            
+
             result = await converter.convert_text("test", "text/plain")
-            
+
             # Should succeed after retry
             assert isinstance(result, ConversionResult)
             assert result.markdown == "# Test"
-            
+
             # Should have made 2 calls (initial + 1 retry)
             assert mock_session_instance.post.call_count == 2
 
@@ -433,19 +435,17 @@ class TestRemoteSDKEdgeCases:
         with patch("md_server.sdk.core.remote.aiohttp.ClientSession") as mock_session:
             mock_session_instance = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_session_instance
-            
+
             # All attempts fail
             mock_session_instance.post.side_effect = Exception("Connection failed")
-            
+
             converter = RemoteMDConverter(
-                endpoint="http://test.example.com",
-                max_retries=2,
-                retry_delay=0.01
+                endpoint="http://test.example.com", max_retries=2, retry_delay=0.01
             )
-            
+
             with pytest.raises((NetworkError, ConversionError)):
                 await converter.convert_text("test", "text/plain")
-            
+
             # Should have made 3 calls (initial + 2 retries)
             assert mock_session_instance.post.call_count == 3
 
@@ -453,20 +453,22 @@ class TestRemoteSDKEdgeCases:
         with patch("md_server.sdk.core.remote.aiohttp.ClientSession") as mock_session:
             with patch("asyncio.sleep") as mock_sleep:
                 mock_session_instance = AsyncMock()
-                mock_session.return_value.__aenter__.return_value = mock_session_instance
+                mock_session.return_value.__aenter__.return_value = (
+                    mock_session_instance
+                )
                 mock_session_instance.post.side_effect = Exception("Connection failed")
-                
+
                 converter = RemoteMDConverter(
                     endpoint="http://test.example.com",
                     max_retries=2,
-                    retry_delay=1.0  # 1 second base delay
+                    retry_delay=1.0,  # 1 second base delay
                 )
-                
+
                 try:
                     await converter.convert_text("test", "text/plain")
-                except:
+                except Exception:
                     pass
-                
+
                 # Should have called sleep with exponential backoff
                 sleep_calls = [call.args[0] for call in mock_sleep.call_args_list]
                 if sleep_calls:  # Implementation may vary
@@ -478,22 +480,20 @@ class TestRemoteSDKEdgeCases:
         with patch("md_server.sdk.core.remote.aiohttp.ClientSession") as mock_session:
             mock_session_instance = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_session_instance
-            
+
             # Different types of network errors
             mock_session_instance.post.side_effect = [
                 asyncio.TimeoutError("Request timeout"),
                 ConnectionError("Network unreachable"),
-                Exception("Generic network error")
+                Exception("Generic network error"),
             ]
-            
+
             converter = RemoteMDConverter(
-                endpoint="http://test.example.com",
-                max_retries=3,
-                retry_delay=0.01
+                endpoint="http://test.example.com", max_retries=3, retry_delay=0.01
             )
-            
+
             with pytest.raises((NetworkError, ConversionError, TimeoutError)):
                 await converter.convert_text("test", "text/plain")
-            
+
             # Should have attempted all retries
             assert mock_session_instance.post.call_count == 3

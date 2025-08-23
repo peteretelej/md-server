@@ -351,7 +351,7 @@ class TestCLIUserExperience:
         ):
             # Mock uvicorn to simulate host resolution failure
             mock_run.side_effect = OSError("Invalid host address")
-            
+
             with pytest.raises(OSError):
                 main()
 
@@ -363,13 +363,13 @@ class TestCLIUserExperience:
         ):
             # Mock permission denied error
             mock_run.side_effect = PermissionError("Permission denied on port 80")
-            
+
             with pytest.raises(PermissionError):
                 main()
 
         # Test 3: Invalid port number (too high)
         with (
-            patch("builtins.print") as mock_print,
+            patch("builtins.print"),
             patch("sys.argv", ["md-server", "--port", "99999"]),
         ):
             # Should raise OverflowError or SystemExit due to invalid port
@@ -378,7 +378,7 @@ class TestCLIUserExperience:
 
         # Test 4: Invalid port number (negative)
         with (
-            patch("builtins.print") as mock_print,
+            patch("builtins.print"),
             patch("sys.argv", ["md-server", "--port", "-1"]),
         ):
             # Should raise OverflowError due to invalid port
@@ -389,6 +389,6 @@ class TestCLIUserExperience:
         with patch("sys.argv", ["md-server", "--port", "not-a-number"]):
             with pytest.raises(SystemExit) as exc_info:
                 main()
-            
+
             # Should exit with error code for invalid argument
             assert exc_info.value.code != 0

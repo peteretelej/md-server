@@ -24,12 +24,15 @@ class TestValidateFilePath:
             "~/home/file.md",
             "C:\\Windows\\file.txt",  # Windows path
         ]
-        
+
         for path in valid_paths:
             result = validate_file_path(path)
             assert isinstance(result, Path)
             # Path object may normalize the path
-            assert str(result) == path.strip() or str(result) == Path(path.strip()).as_posix()
+            assert (
+                str(result) == path.strip()
+                or str(result) == Path(path.strip()).as_posix()
+            )
 
     def test_empty_path(self):
         """Test empty path validation"""
@@ -37,11 +40,11 @@ class TestValidateFilePath:
             "",
             None,
         ]
-        
+
         for path in empty_paths:
             with pytest.raises(InvalidInputError, match="File path cannot be empty"):
                 validate_file_path(path)
-        
+
         # Whitespace only - should be handled after strip
         with pytest.raises(InvalidInputError, match="Invalid file path"):
             validate_file_path("   ")
@@ -54,7 +57,7 @@ class TestValidateFilePath:
             {},
             True,
         ]
-        
+
         for path in invalid_types:
             with pytest.raises(InvalidInputError, match="File path cannot be empty"):
                 validate_file_path(path)
@@ -69,8 +72,8 @@ class TestValidateFilePath:
         """Test paths that result in empty names after Path processing"""
         # Path(".").name returns ".", not empty, so it's valid
         # Path("..").name returns "..", not empty, so it's valid
-        
-        # These should be valid as they have names  
+
+        # These should be valid as they have names
         result = validate_file_path("file.txt")
         assert result.name == "file.txt"
 
@@ -85,23 +88,25 @@ class TestValidateFileSizeLimits:
             "image": 10 * 1024 * 1024,
             "pdf": 20 * 1024 * 1024,
         }
-        
+
         # Within limits
         validate_file_size_limits(1024, "text/plain", limits)  # 1KB text
         validate_file_size_limits(5 * 1024 * 1024, "image/png", limits)  # 5MB image
-        validate_file_size_limits(15 * 1024 * 1024, "application/pdf", limits)  # 15MB PDF
+        validate_file_size_limits(
+            15 * 1024 * 1024, "application/pdf", limits
+        )  # 15MB PDF
 
     def test_negative_size(self):
         """Test negative size validation"""
         limits = {"default": 50 * 1024 * 1024}
-        
+
         with pytest.raises(InvalidInputError, match="File size cannot be negative"):
             validate_file_size_limits(-1, "text/plain", limits)
 
     def test_zero_size(self):
         """Test zero size validation"""
         limits = {"default": 50 * 1024 * 1024}
-        
+
         with pytest.raises(InvalidInputError, match="File cannot be empty"):
             validate_file_size_limits(0, "text/plain", limits)
 
@@ -113,33 +118,41 @@ class TestValidateFileSizeLimits:
             "video": 100 * 1024 * 1024,
             "pdf": 20 * 1024 * 1024,
         }
-        
+
         # Test image limit
         with pytest.raises(InvalidInputError, match="exceeds.*limit"):
-            validate_file_size_limits(15 * 1024 * 1024, "image/png", limits)  # Over 10MB
-        
+            validate_file_size_limits(
+                15 * 1024 * 1024, "image/png", limits
+            )  # Over 10MB
+
         # Test PDF limit
         with pytest.raises(InvalidInputError, match="exceeds.*limit"):
-            validate_file_size_limits(25 * 1024 * 1024, "application/pdf", limits)  # Over 20MB
-        
+            validate_file_size_limits(
+                25 * 1024 * 1024, "application/pdf", limits
+            )  # Over 20MB
+
         # Test video limit
         with pytest.raises(InvalidInputError, match="exceeds.*limit"):
-            validate_file_size_limits(150 * 1024 * 1024, "video/mp4", limits)  # Over 100MB
-        
+            validate_file_size_limits(
+                150 * 1024 * 1024, "video/mp4", limits
+            )  # Over 100MB
+
         # Test default limit
         with pytest.raises(InvalidInputError, match="exceeds.*limit"):
-            validate_file_size_limits(60 * 1024 * 1024, "text/plain", limits)  # Over 50MB
+            validate_file_size_limits(
+                60 * 1024 * 1024, "text/plain", limits
+            )  # Over 50MB
 
     def test_edge_cases(self):
         """Test edge cases"""
         limits = {"default": 10 * 1024 * 1024}
-        
+
         # Exactly at limit
         validate_file_size_limits(10 * 1024 * 1024, "text/plain", limits)
-        
+
         # Just under limit
         validate_file_size_limits(10 * 1024 * 1024 - 1, "text/plain", limits)
-        
+
         # Just over limit
         with pytest.raises(InvalidInputError):
             validate_file_size_limits(10 * 1024 * 1024 + 1, "text/plain", limits)
@@ -151,7 +164,7 @@ class TestValidateRemoteFileSize:
     def test_valid_remote_sizes(self):
         """Test valid remote file sizes"""
         max_size = 25 * 1024 * 1024  # 25MB
-        
+
         validate_remote_file_size(1024, max_size)  # 1KB
         validate_remote_file_size(max_size, max_size)  # Exactly at limit
         validate_remote_file_size(max_size - 1, max_size)  # Just under limit
@@ -169,7 +182,7 @@ class TestValidateRemoteFileSize:
     def test_oversized_remote_file(self):
         """Test oversized remote file"""
         max_size = 25 * 1024 * 1024
-        
+
         with pytest.raises(InvalidInputError, match="Remote file too large"):
             validate_remote_file_size(max_size + 1, max_size)
 
@@ -191,7 +204,7 @@ class TestDetectFileContentType:
             ("data.json", "application/json"),
             ("spreadsheet.csv", "text/csv"),
         ]
-        
+
         for filename, expected in test_cases:
             detected = detect_file_content_type(b"sample content", filename)
             assert detected == expected
@@ -206,7 +219,7 @@ class TestDetectFileContentType:
             (b"%PDF", "unknown", "application/pdf"),
             (b"PK\x03\x04", "unknown", "application/zip"),
         ]
-        
+
         for content, filename, expected in test_cases:
             content_with_data = content + b"\x00" * 50
             detected = detect_file_content_type(content_with_data, filename)
@@ -215,43 +228,43 @@ class TestDetectFileContentType:
     def test_office_document_detection(self):
         """Test Office document detection"""
         zip_content = b"PK\x03\x04" + b"\x00" * 100
-        
+
         # Office documents are ZIP-based but should be detected by extension
         detected = detect_file_content_type(zip_content, "document.docx")
         assert "wordprocessingml" in detected or "docx" in detected
-        
+
         detected = detect_file_content_type(zip_content, "spreadsheet.xlsx")
         assert "spreadsheetml" in detected or "xlsx" in detected
-        
+
         detected = detect_file_content_type(zip_content, "presentation.pptx")
         assert "presentationml" in detected or "pptx" in detected
 
     def test_old_office_format_detection(self):
         """Test old Office format detection"""
         ole_content = b"\xd0\xcf\x11\xe0" + b"\x00" * 100
-        
+
         detected = detect_file_content_type(ole_content, "document.doc")
         assert detected == "application/msword"
-        
+
         detected = detect_file_content_type(ole_content, "spreadsheet.xls")
         assert detected == "application/vnd.ms-excel"
-        
+
         detected = detect_file_content_type(ole_content, "presentation.ppt")
         assert detected == "application/vnd.ms-powerpoint"
 
     def test_text_content_detection(self):
         """Test text content detection"""
         text_content = b"Hello, world! This is plain text."
-        
+
         detected = detect_file_content_type(text_content, "document.html")
         assert detected == "text/html"
-        
+
         detected = detect_file_content_type(text_content, "config.xml")
         assert detected in ["text/xml", "application/xml"]  # Both are valid
-        
+
         detected = detect_file_content_type(text_content, "data.json")
         assert detected == "application/json"
-        
+
         detected = detect_file_content_type(text_content, "unknown.txt")
         assert detected == "text/plain"
 
@@ -268,28 +281,31 @@ class TestValidateConversionOptions:
     def test_valid_boolean_options(self):
         """Test valid boolean options"""
         allowed_keys = {
-            "js_rendering", "extract_images", "ocr_enabled", 
-            "preserve_formatting", "clean_markdown"
+            "js_rendering",
+            "extract_images",
+            "ocr_enabled",
+            "preserve_formatting",
+            "clean_markdown",
         }
-        
+
         options = {
             "js_rendering": True,
             "extract_images": False,
             "ocr_enabled": True,
         }
-        
+
         validated = validate_conversion_options(options, allowed_keys)
         assert validated == options
 
     def test_valid_timeout_option(self):
         """Test valid timeout options"""
         allowed_keys = {"timeout"}
-        
+
         # Integer timeout
         options = {"timeout": 30}
         validated = validate_conversion_options(options, allowed_keys)
         assert validated == options
-        
+
         # Float timeout
         options = {"timeout": 30.5}
         validated = validate_conversion_options(options, allowed_keys)
@@ -298,9 +314,9 @@ class TestValidateConversionOptions:
     def test_invalid_boolean_options(self):
         """Test invalid boolean options"""
         allowed_keys = {"js_rendering"}
-        
+
         invalid_values = ["true", 1, 0, "false", None]
-        
+
         for value in invalid_values:
             with pytest.raises(InvalidInputError, match="must be boolean"):
                 validate_conversion_options({"js_rendering": value}, allowed_keys)
@@ -308,9 +324,9 @@ class TestValidateConversionOptions:
     def test_invalid_timeout_options(self):
         """Test invalid timeout options"""
         allowed_keys = {"timeout"}
-        
+
         invalid_timeouts = [0, -1, "30", None, []]
-        
+
         for timeout in invalid_timeouts:
             with pytest.raises(InvalidInputError, match="must be positive number"):
                 validate_conversion_options({"timeout": timeout}, allowed_keys)
@@ -318,14 +334,14 @@ class TestValidateConversionOptions:
     def test_filtered_options(self):
         """Test that disallowed options are filtered out"""
         allowed_keys = {"js_rendering", "timeout"}
-        
+
         options = {
             "js_rendering": True,
             "timeout": 30,
             "disallowed_option": "value",
             "another_bad_option": 123,
         }
-        
+
         validated = validate_conversion_options(options, allowed_keys)
         expected = {
             "js_rendering": True,
@@ -345,7 +361,7 @@ class TestSanitizeFilenameForApi:
             "file-name.txt",
             "simple.docx",
         ]
-        
+
         for name in valid_names:
             sanitized = sanitize_filename_for_api(name)
             assert sanitized == name
@@ -362,12 +378,13 @@ class TestSanitizeFilenameForApi:
             ("../parent/file.docx", "file.docx"),
             ("./current/file.pdf", "file.pdf"),
         ]
-        
+
         # Windows path is only handled on Windows
         import platform
+
         if platform.system() == "Windows":
             test_cases.append(("C:\\Windows\\file.exe", "file.exe"))
-        
+
         for path, expected in test_cases:
             sanitized = sanitize_filename_for_api(path)
             assert sanitized == expected
@@ -380,7 +397,7 @@ class TestSanitizeFilenameForApi:
             ("file(1).pdf", "file_1_.pdf"),
             ("file[special].txt", "file_special_.txt"),
         ]
-        
+
         for original, expected in test_cases:
             sanitized = sanitize_filename_for_api(original)
             assert sanitized == expected
@@ -392,7 +409,7 @@ class TestSanitizeFilenameForApi:
             ("-filename.txt", "file_-filename.txt"),
             ("..config", "file_..config"),
         ]
-        
+
         for original, expected in test_cases:
             sanitized = sanitize_filename_for_api(original)
             assert sanitized == expected
@@ -404,7 +421,7 @@ class TestSanitizeFilenameForApi:
         sanitized = sanitize_filename_for_api(long_name)
         assert len(sanitized) <= 255
         assert sanitized.endswith(".txt")
-        
+
         # Long name without extension
         long_name_no_ext = "a" * 300
         sanitized = sanitize_filename_for_api(long_name_no_ext)
@@ -417,7 +434,7 @@ class TestSanitizeFilenameForApi:
             "-----",
             "@#$%^&*()",
         ]
-        
+
         for name in problematic_names:
             sanitized = sanitize_filename_for_api(name)
             # Should either be properly sanitized or fallback to unknown

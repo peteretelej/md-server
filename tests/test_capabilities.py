@@ -3,7 +3,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from md_server.sdk import MDConverter
+from md_server.sdk import MDConverter, ConversionResult
+from md_server.sdk.exceptions import ConversionError, InvalidInputError
 from md_server.browser import BrowserChecker
 from md_server.detection import ContentTypeDetector
 from litestar.testing import TestClient
@@ -276,40 +277,41 @@ class TestBrowserCapabilityIntegration:
     async def test_browser_detection_accuracy(self):
         """Test browser detection with various availability scenarios."""
         from unittest.mock import patch
-        
+
         # Test when browser is truly available
         with patch("md_server.browser.AsyncWebCrawler") as mock_crawler:
             mock_crawler.return_value.__aenter__.return_value = MagicMock()
             mock_crawler.return_value.__aexit__.return_value = None
-            
+
             result = await BrowserChecker.is_available()
             assert isinstance(result, bool)
             # Should attempt to create browser instance
             mock_crawler.assert_called()
 
         # Test when browser import fails
-        with patch("md_server.browser.AsyncWebCrawler", side_effect=ImportError("No module named 'crawl4ai'")):
+        with patch("md_server.browser.AsyncWebCrawler") as mock_crawler:
+            mock_crawler.side_effect = Exception("Browser executable not found")
             result = await BrowserChecker.is_available()
             assert result is False
 
         # Test when browser creation fails
         with patch("md_server.browser.AsyncWebCrawler") as mock_crawler:
             mock_crawler.side_effect = Exception("Browser initialization failed")
-            
+
             result = await BrowserChecker.is_available()
             assert result is False
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_url_conversion_with_without_browser(self):
         """Test URL conversion behavior with and without browser availability."""
         converter = MDConverter()
         test_url = "https://httpbin.org/robots.txt"
-        
+
         # Test with browser available (mocked)
         with patch("md_server.browser.AsyncWebCrawler") as mock_crawler:
             mock_crawler.return_value.__aenter__.return_value = MagicMock()
             mock_crawler.return_value.__aexit__.return_value = None
-            
+
             try:
                 result = await converter.convert_url(test_url)
                 assert isinstance(result, ConversionResult)
@@ -319,7 +321,10 @@ class TestBrowserCapabilityIntegration:
                 pass
 
         # Test without browser (mocked unavailable)
-        with patch("md_server.browser.AsyncWebCrawler", side_effect=ImportError("Browser not available")):
+        with patch(
+            "md_server.browser.AsyncWebCrawler",
+            side_effect=ImportError("Browser not available"),
+        ):
             try:
                 result = await converter.convert_url(test_url)
                 assert isinstance(result, ConversionResult)
@@ -340,21 +345,27 @@ class TestBrowserCapabilityIntegration:
         </body>
         </html>
         """
-        
+
         # Test js_rendering=True when browser available
         with patch("md_server.browser.BrowserChecker.is_available", return_value=True):
-            result = await converter.convert_text(html_with_js, "text/html", js_rendering=True)
+            result = await converter.convert_text(
+                html_with_js, "text/html", js_rendering=True
+            )
             assert isinstance(result, ConversionResult)
             assert result.markdown is not None
 
         # Test js_rendering=True when browser unavailable (should fallback)
         with patch("md_server.browser.BrowserChecker.is_available", return_value=False):
-            result = await converter.convert_text(html_with_js, "text/html", js_rendering=True)
+            result = await converter.convert_text(
+                html_with_js, "text/html", js_rendering=True
+            )
             assert isinstance(result, ConversionResult)
             assert result.markdown is not None
 
         # Test js_rendering=False (should use basic processing)
-        result = await converter.convert_text(html_with_js, "text/html", js_rendering=False)
+        result = await converter.convert_text(
+            html_with_js, "text/html", js_rendering=False
+        )
         assert isinstance(result, ConversionResult)
         assert result.markdown is not None
 
@@ -363,19 +374,21 @@ class TestBrowserCapabilityIntegration:
         """Test connection timeout and retry logic for browser operations."""
         from unittest.mock import AsyncMock, patch
         import asyncio
-        
+
         converter = MDConverter(timeout=2)
-        
+
         # Test timeout during browser operation
         with patch("md_server.browser.AsyncWebCrawler") as mock_crawler:
             mock_instance = AsyncMock()
             mock_crawler.return_value.__aenter__.return_value = mock_instance
-            
+
             # Simulate timeout in crawling
             mock_instance.arun.side_effect = asyncio.TimeoutError("Operation timed out")
-            
+
             try:
-                result = await converter.convert_url("https://example.com", js_rendering=True)
+                result = await converter.convert_url(
+                    "https://example.com", js_rendering=True
+                )
                 # Should either succeed with fallback or raise appropriate error
                 assert isinstance(result, ConversionResult) or True
             except (ConversionError, InvalidInputError):
@@ -386,15 +399,17 @@ class TestBrowserCapabilityIntegration:
         with patch("md_server.browser.AsyncWebCrawler") as mock_crawler:
             mock_instance = AsyncMock()
             mock_crawler.return_value.__aenter__.return_value = mock_instance
-            
+
             # First attempt fails, second succeeds
             mock_instance.arun.side_effect = [
                 Exception("Transient error"),
-                AsyncMock(markdown="# Success")
+                AsyncMock(markdown="# Success"),
             ]
-            
+
             try:
-                result = await converter.convert_url("https://example.com", js_rendering=True)
+                result = await converter.convert_url(
+                    "https://example.com", js_rendering=True
+                )
                 # Should handle retry gracefully
                 assert isinstance(result, ConversionResult) or True
             except Exception:
@@ -405,14 +420,14 @@ class TestBrowserCapabilityIntegration:
     async def test_browser_capability_integration_edge_cases(self):
         """Test edge cases in browser capability integration."""
         converter = MDConverter()
-        
+
         # Test with malformed URL that browser might handle differently
         malformed_urls = [
             "javascript:alert('test')",
             "data:text/html,<h1>Test</h1>",
             "file:///etc/passwd",
         ]
-        
+
         for url in malformed_urls:
             try:
                 result = await converter.convert_url(url)
@@ -438,7 +453,7 @@ class TestBrowserCapabilityIntegration:
         </body>
         </html>
         """
-        
+
         result = await converter.convert_text(complex_html, "text/html")
         assert isinstance(result, ConversionResult)
         assert result.markdown is not None

@@ -1,5 +1,10 @@
 import pytest
-from md_server.security import URLValidator, FileSizeValidator, ContentValidator, MimeTypeValidator
+from md_server.security import (
+    URLValidator,
+    FileSizeValidator,
+    ContentValidator,
+    MimeTypeValidator,
+)
 
 
 class TestURLValidator:
@@ -17,7 +22,7 @@ class TestURLValidator:
             "http://192.168.1.100/public",  # Public IP
             "https://example.com/path#fragment",
         ]
-        
+
         for url in valid_urls:
             # Should not raise exception
             validated = URLValidator.validate_url(url)
@@ -37,7 +42,7 @@ class TestURLValidator:
             "http://",  # No netloc
             "https://",  # No netloc
         ]
-        
+
         for url in invalid_urls:
             with pytest.raises(ValueError):
                 URLValidator.validate_url(url)
@@ -56,7 +61,7 @@ class TestURLValidator:
             "Http://example.com",
             "Https://example.com",
         ]
-        
+
         for url in mixed_case_urls:
             # Should not raise exception - scheme check is case insensitive
             validated = URLValidator.validate_url(url)
@@ -84,53 +89,67 @@ class TestFileSizeValidator:
         """Test format-specific size limits"""
         # PDF limit (50MB)
         pdf_limit = 50 * 1024 * 1024
-        FileSizeValidator.validate_size(pdf_limit - 1, "application/pdf")  # Just under limit
-        
+        FileSizeValidator.validate_size(
+            pdf_limit - 1, "application/pdf"
+        )  # Just under limit
+
         with pytest.raises(ValueError, match="exceeds limit"):
-            FileSizeValidator.validate_size(pdf_limit + 1, "application/pdf")  # Over limit
+            FileSizeValidator.validate_size(
+                pdf_limit + 1, "application/pdf"
+            )  # Over limit
 
         # Text limit (10MB)
         text_limit = 10 * 1024 * 1024
-        FileSizeValidator.validate_size(text_limit - 1, "text/plain")  # Just under limit
-        
+        FileSizeValidator.validate_size(
+            text_limit - 1, "text/plain"
+        )  # Just under limit
+
         with pytest.raises(ValueError, match="exceeds limit"):
             FileSizeValidator.validate_size(text_limit + 1, "text/plain")  # Over limit
 
         # DOCX limit (25MB)
         docx_limit = 25 * 1024 * 1024
-        FileSizeValidator.validate_size(docx_limit - 1, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        
+        FileSizeValidator.validate_size(
+            docx_limit - 1,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
         with pytest.raises(ValueError, match="exceeds limit"):
-            FileSizeValidator.validate_size(docx_limit + 1, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            FileSizeValidator.validate_size(
+                docx_limit + 1,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
 
     def test_unknown_format_uses_default(self):
         """Test that unknown formats use default limit"""
         default_limit = FileSizeValidator.DEFAULT_MAX_SIZE
-        
+
         # Should use default limit for unknown formats
         FileSizeValidator.validate_size(default_limit - 1, "unknown/format")
-        
+
         with pytest.raises(ValueError, match="exceeds limit"):
             FileSizeValidator.validate_size(default_limit + 1, "unknown/format")
 
     def test_no_content_type_uses_default(self):
         """Test that None content type uses default limit"""
         default_limit = FileSizeValidator.DEFAULT_MAX_SIZE
-        
+
         FileSizeValidator.validate_size(default_limit - 1, None)
-        
+
         with pytest.raises(ValueError, match="exceeds limit"):
             FileSizeValidator.validate_size(default_limit + 1, None)
 
     def test_error_message_format(self):
         """Test error message formatting"""
         try:
-            FileSizeValidator.validate_size(60 * 1024 * 1024, "application/pdf")  # 60MB PDF
+            FileSizeValidator.validate_size(
+                60 * 1024 * 1024, "application/pdf"
+            )  # 60MB PDF
             assert False, "Should have raised ValueError"
         except ValueError as e:
             message = str(e)
             assert "60.0MB" in message  # Actual size
-            assert "50MB" in message   # Limit
+            assert "50MB" in message  # Limit
             assert "application/pdf" in message  # Format
 
 
@@ -154,11 +173,13 @@ class TestContentValidator:
             (b"\x3c\x68\x74\x6d\x6c", "text/html"),  # HTML <html
             (b"\x3c\x21\x44\x4f\x43\x54\x59\x50\x45", "text/html"),  # HTML <!DOCTYPE
         ]
-        
+
         for magic_bytes, expected_type in test_cases:
             content = magic_bytes + b"\x00" * 50  # Add padding
             detected = ContentValidator.detect_content_type(content)
-            assert detected == expected_type, f"Failed for {magic_bytes.hex()}: expected {expected_type}, got {detected}"
+            assert detected == expected_type, (
+                f"Failed for {magic_bytes.hex()}: expected {expected_type}, got {detected}"
+            )
 
     def test_text_content_detection(self):
         """Test text content detection"""
@@ -166,9 +187,9 @@ class TestContentValidator:
         text_content = b"Hello, world! This is plain text."
         detected = ContentValidator.detect_content_type(text_content)
         assert detected == "text/plain"
-        
+
         # Text with unicode
-        unicode_text = "Hello, 世界! 🌍".encode('utf-8')
+        unicode_text = "Hello, 世界! 🌍".encode("utf-8")
         detected = ContentValidator.detect_content_type(unicode_text)
         assert detected == "text/plain"
 
@@ -178,7 +199,7 @@ class TestContentValidator:
         binary_content = bytes(range(256))
         detected = ContentValidator.detect_content_type(binary_content)
         assert detected == "application/octet-stream"
-        
+
         # Invalid UTF-8
         invalid_utf8 = b"\xff\xfe" + b"\x80" * 50
         detected = ContentValidator.detect_content_type(invalid_utf8)
@@ -188,7 +209,7 @@ class TestContentValidator:
         """Test empty content detection"""
         detected = ContentValidator.detect_content_type(b"")
         assert detected == "application/octet-stream"
-        
+
         detected = ContentValidator.detect_content_type(None)
         assert detected == "application/octet-stream"
 
@@ -196,9 +217,11 @@ class TestContentValidator:
         """Test content type validation when types match"""
         # PDF content with PDF declaration
         pdf_content = b"%PDF-1.4\nSample content"
-        validated = ContentValidator.validate_content_type(pdf_content, "application/pdf")
+        validated = ContentValidator.validate_content_type(
+            pdf_content, "application/pdf"
+        )
         assert validated == "application/pdf"
-        
+
         # Text content with text declaration
         text_content = b"Plain text content"
         validated = ContentValidator.validate_content_type(text_content, "text/plain")
@@ -208,13 +231,13 @@ class TestContentValidator:
         """Test Office document validation (ZIP-based)"""
         # ZIP content declared as Office document
         zip_content = b"PK\x03\x04" + b"\x00" * 100
-        
+
         office_types = [
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ]
-        
+
         for office_type in office_types:
             validated = ContentValidator.validate_content_type(zip_content, office_type)
             assert validated == office_type
@@ -223,21 +246,23 @@ class TestContentValidator:
         """Test octet-stream fallback behavior"""
         # Unknown binary content with declared type
         unknown_content = b"\x12\x34\x56\x78" * 25
-        validated = ContentValidator.validate_content_type(unknown_content, "custom/format")
+        validated = ContentValidator.validate_content_type(
+            unknown_content, "custom/format"
+        )
         assert validated == "custom/format"  # Trust declared type for unknown content
 
     def test_security_sensitive_type_mismatch(self):
         """Test security-sensitive type mismatch detection"""
         # Text content declared as PDF (security sensitive)
         text_content = b"This is plain text, not a PDF"
-        
+
         with pytest.raises(ValueError, match="Content type mismatch"):
             ContentValidator.validate_content_type(text_content, "application/pdf")
-        
+
         # Text content declared as HTML
         with pytest.raises(ValueError, match="Content type mismatch"):
             ContentValidator.validate_content_type(text_content, "text/html")
-        
+
         # Text content declared as PNG
         with pytest.raises(ValueError, match="Content type mismatch"):
             ContentValidator.validate_content_type(text_content, "image/png")
@@ -247,7 +272,7 @@ class TestContentValidator:
         pdf_content = b"%PDF-1.4\nSample"
         detected = ContentValidator.validate_content_type(pdf_content, None)
         assert detected == "application/pdf"
-        
+
         text_content = b"Plain text"
         detected = ContentValidator.validate_content_type(text_content, None)
         assert detected == "text/plain"
@@ -267,7 +292,7 @@ class TestMimeTypeValidator:
             "text/html",
             "application/json",
         ]
-        
+
         for mime_type in valid_types:
             validated = MimeTypeValidator.validate_mime_type(mime_type)
             assert validated == mime_type.lower()
@@ -277,7 +302,7 @@ class TestMimeTypeValidator:
         mixed_case = "TEXT/PLAIN"
         validated = MimeTypeValidator.validate_mime_type(mixed_case)
         assert validated == "text/plain"
-        
+
         mixed_case = "Application/PDF"
         validated = MimeTypeValidator.validate_mime_type(mixed_case)
         assert validated == "application/pdf"
@@ -292,7 +317,7 @@ class TestMimeTypeValidator:
         """Test empty MIME type validation"""
         with pytest.raises(ValueError, match="MIME type cannot be empty"):
             MimeTypeValidator.validate_mime_type("")
-        
+
         with pytest.raises(ValueError, match="MIME type cannot be empty"):
             MimeTypeValidator.validate_mime_type(None)
 
@@ -306,7 +331,7 @@ class TestMimeTypeValidator:
         """Test MIME types without separator"""
         with pytest.raises(ValueError, match="must contain '/' separator"):
             MimeTypeValidator.validate_mime_type("textplain")
-        
+
         with pytest.raises(ValueError, match="must contain '/' separator"):
             MimeTypeValidator.validate_mime_type("application")
 
@@ -314,7 +339,7 @@ class TestMimeTypeValidator:
         """Test MIME types with multiple separators"""
         with pytest.raises(ValueError, match="exactly one '/' separator"):
             MimeTypeValidator.validate_mime_type("text/plain/charset")
-        
+
         with pytest.raises(ValueError, match="exactly one '/' separator"):
             MimeTypeValidator.validate_mime_type("a/b/c/d")
 
@@ -326,12 +351,12 @@ class TestMimeTypeValidator:
         except ValueError as e:
             # May fail for multiple '/' separators instead of invalid characters
             assert "separator" in str(e) or "Invalid characters" in str(e)
-        
+
         try:
             MimeTypeValidator.validate_mime_type("text\\plain")
         except ValueError as e:
             assert "Invalid characters" in str(e)
-        
+
         try:
             MimeTypeValidator.validate_mime_type("application/..pdf")
         except ValueError as e:
@@ -345,7 +370,7 @@ class TestMimeTypeValidator:
             "text/plain",  # Standard type
             "a/b",  # Single characters
         ]
-        
+
         for mime_type in edge_cases:
             validated = MimeTypeValidator.validate_mime_type(mime_type)
             assert validated == mime_type.lower()

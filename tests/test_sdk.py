@@ -430,9 +430,12 @@ class TestSDKErrorScenarios:
     async def test_browser_unavailable_fallback(self, converter):
         """Test SDK fallback when browser unavailable."""
         from unittest.mock import patch
-        
+
         # Mock AsyncWebCrawler import failure
-        with patch("md_server.browser.AsyncWebCrawler", side_effect=ImportError("Browser not available")):
+        with patch(
+            "md_server.browser.AsyncWebCrawler",
+            side_effect=ImportError("Browser not available"),
+        ):
             # URL conversion should still work with fallback
             try:
                 result = await converter.convert_url("https://httpbin.org/robots.txt")
@@ -444,7 +447,9 @@ class TestSDKErrorScenarios:
 
             # JS rendering option should be ignored gracefully
             try:
-                result = await converter.convert_url("https://httpbin.org/robots.txt", js_rendering=True)
+                result = await converter.convert_url(
+                    "https://httpbin.org/robots.txt", js_rendering=True
+                )
                 assert isinstance(result, ConversionResult)
                 assert result.markdown is not None
             except Exception:
@@ -457,18 +462,20 @@ class TestSDKErrorScenarios:
         # Connection refused error
         with pytest.raises((ConversionError, InvalidInputError)):
             await converter.convert_url("http://127.0.0.1:99999")
-        
+
         # DNS resolution failure
         with pytest.raises((ConversionError, InvalidInputError)):
-            await converter.convert_url("https://invalid-domain-that-does-not-exist-123456.com")
-        
+            await converter.convert_url(
+                "https://invalid-domain-that-does-not-exist-123456.com"
+            )
+
         # SSL certificate error (self-signed)
         try:
             await converter.convert_url("https://self-signed.badssl.com")
         except (ConversionError, InvalidInputError):
             # SSL errors are expected
             pass
-        
+
         # Connection timeout
         short_timeout_converter = MDConverter(timeout=1)
         try:
@@ -482,17 +489,23 @@ class TestSDKErrorScenarios:
         """Test SDK validation with edge cases."""
         # Unicode filenames (emoji, Chinese chars)
         unicode_content = b"Test content"
-        result = await converter.convert_content(unicode_content, filename="测试文档📄.txt")
+        result = await converter.convert_content(
+            unicode_content, filename="测试文档📄.txt"
+        )
         assert isinstance(result, ConversionResult)
         assert result.markdown is not None
 
         # Path traversal attempts (should be handled safely)
-        result = await converter.convert_content(b"Test content", filename="../../../etc/passwd.txt")
+        result = await converter.convert_content(
+            b"Test content", filename="../../../etc/passwd.txt"
+        )
         assert isinstance(result, ConversionResult)
 
         # Very long filenames (truncated gracefully)
         long_filename = "a" * 300 + ".txt"
-        result = await converter.convert_content(b"Test content", filename=long_filename)
+        result = await converter.convert_content(
+            b"Test content", filename=long_filename
+        )
         assert isinstance(result, ConversionResult)
 
         # Special chars in text content
@@ -513,37 +526,45 @@ class TestSDKErrorScenarios:
     def test_model_validation_errors(self):
         """Test model validation error paths."""
         from md_server.models import ConvertRequest, ConversionOptions
-        
+
         # Test 1: ConvertRequest with no input fields
-        with pytest.raises(ValueError, match="One of url, content, or text must be provided"):
+        with pytest.raises(
+            ValueError, match="One of url, content, or text must be provided"
+        ):
             ConvertRequest()
-        
+
         # Test 2: ConvertRequest with multiple input fields
-        with pytest.raises(ValueError, match="Only one of url, content, or text can be provided"):
-            ConvertRequest(url="https://example.com", text="content", content="base64content")
-        
+        with pytest.raises(
+            ValueError, match="Only one of url, content, or text can be provided"
+        ):
+            ConvertRequest(
+                url="https://example.com", text="content", content="base64content"
+            )
+
         # Test 3: ConvertRequest with two input fields
-        with pytest.raises(ValueError, match="Only one of url, content, or text can be provided"):
+        with pytest.raises(
+            ValueError, match="Only one of url, content, or text can be provided"
+        ):
             ConvertRequest(url="https://example.com", text="content")
-        
+
         # Test 4: Valid ConvertRequest with url
         request = ConvertRequest(url="https://example.com")
         assert request.url == "https://example.com"
         assert request.text is None
         assert request.content is None
-        
+
         # Test 5: Valid ConvertRequest with text
         request = ConvertRequest(text="content")
         assert request.text == "content"
         assert request.url is None
         assert request.content is None
-        
+
         # Test 6: Valid ConvertRequest with content
         request = ConvertRequest(content="base64content")
         assert request.content == "base64content"
         assert request.url is None
         assert request.text is None
-        
+
         # Test 7: ConversionOptions with various field types
         options = ConversionOptions(
             js_rendering=True,
@@ -552,7 +573,7 @@ class TestSDKErrorScenarios:
             preserve_formatting=True,
             ocr_enabled=False,
             max_length=1000,
-            clean_markdown=True
+            clean_markdown=True,
         )
         assert options.js_rendering is True
         assert options.timeout == 30
@@ -560,14 +581,17 @@ class TestSDKErrorScenarios:
 
     def test_sync_wrapper_edge_cases(self):
         """Test sync wrapper edge cases - event loop handling."""
-        import asyncio
-        from md_server.sdk.core.sync_wrappers import sync_convert_text, sync_convert_url, sync_convert_content
-        
+        from md_server.sdk.core.sync_wrappers import (
+            sync_convert_text,
+            sync_convert_url,
+            sync_convert_content,
+        )
+
         # Test 1: Basic sync wrapper functionality
         result = sync_convert_text("# Test", "text/markdown")
         assert result.markdown is not None
         assert isinstance(result, ConversionResult)
-        
+
         # Test 2: Sync wrapper with URL (might fail in test environment)
         try:
             result = sync_convert_url("https://example.com")
@@ -575,33 +599,34 @@ class TestSDKErrorScenarios:
         except (ConversionError, InvalidInputError):
             # Network errors are acceptable in test environment
             pass
-        
+
         # Test 3: Sync wrapper with content
         content = b"Test content for sync wrapper"
         result = sync_convert_content(content, filename="test.txt")
         assert isinstance(result, ConversionResult)
         assert result.markdown is not None
-        
+
         # Test 4: Sync wrapper error handling
         try:
             sync_convert_url("invalid-url")
         except (ConversionError, InvalidInputError) as e:
             assert str(e) is not None
-        
+
         # Test 5: Event loop handling in sync context
         # This tests that sync wrappers work even when called from different contexts
         def run_in_thread():
             return sync_convert_text("Thread test", "text/plain")
-        
+
         import threading
+
         result_holder = []
-        
+
         def thread_target():
             result_holder.append(run_in_thread())
-        
+
         thread = threading.Thread(target=thread_target)
         thread.start()
         thread.join()
-        
+
         assert len(result_holder) == 1
         assert isinstance(result_holder[0], ConversionResult)
