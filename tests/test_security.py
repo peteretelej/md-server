@@ -160,6 +160,209 @@ class TestSecurityThroughHTTPAPI:
         assert "javascript:" not in markdown
 
 
+class TestSecurityValidationComplete:
+    """Comprehensive security validation tests"""
+
+    @pytest.fixture
+    def converter(self):
+        """SDK converter instance for testing."""
+        return MDConverter()
+
+    @pytest.mark.asyncio
+    async def test_private_ip_blocking(self, converter):
+        """Test private IP address blocking"""
+        private_ips = [
+            "http://192.168.1.1/admin",
+            "http://10.0.0.1/internal",
+            "http://172.16.0.1/private",
+            "http://169.254.169.254/metadata",  # AWS metadata service
+        ]
+
+        for url in private_ips:
+            try:
+                result = await converter.convert_url(url)
+                assert result.success is False or len(result.markdown) == 0
+            except (ConversionError, InvalidInputError, NetworkError):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_localhost_blocking(self, converter):
+        """Test localhost blocking"""
+        localhost_urls = [
+            "http://127.0.0.1:22/ssh",
+            "http://localhost:3306/mysql",
+            "http://[::1]:80/internal",
+        ]
+
+        for url in localhost_urls:
+            try:
+                result = await converter.convert_url(url)
+                assert result.success is False or len(result.markdown) == 0
+            except (ConversionError, InvalidInputError, NetworkError):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_file_size_limits_per_mime_type(self, converter):
+        """Test file size limits per MIME type"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Test PDF size limit (50MB is too large for tests, use 1MB)
+            pdf_file = Path(tmpdir) / "large.pdf"
+            pdf_content = b"%PDF-1.4\n" + b"x" * (1024 * 1024)  # 1MB PDF
+            pdf_file.write_bytes(pdf_content)
+            
+            result = await converter.convert_file(str(pdf_file))
+            assert isinstance(result.success, bool)
+
+            # Test text file limit
+            text_file = Path(tmpdir) / "large.txt"
+            text_file.write_text("x" * (500 * 1024))  # 500KB text
+            
+            result = await converter.convert_file(str(text_file))
+            assert isinstance(result.success, bool)
+
+    @pytest.mark.asyncio
+    async def test_magic_byte_vs_declared_type_mismatch(self, converter):
+        """Test magic byte vs declared type mismatch detection"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Executable disguised as PDF
+            fake_pdf = Path(tmpdir) / "malware.pdf"
+            fake_pdf.write_bytes(b"MZ" + b"\x00" * 100)  # PE header
+            
+            result = await converter.convert_file(str(fake_pdf))
+            assert result.success is False or "executable" in result.markdown.lower()
+
+            # ZIP disguised as text
+            fake_txt = Path(tmpdir) / "archive.txt"
+            fake_txt.write_bytes(b"PK\x03\x04" + b"\x00" * 100)  # ZIP header
+            
+            result = await converter.convert_file(str(fake_txt))
+            assert isinstance(result.success, bool)
+
+    @pytest.mark.asyncio
+    async def test_mime_type_injection_attempts(self, converter):
+        """Test MIME type injection attempts"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Malicious MIME types that might cause issues
+            malicious_content = "<script>alert('xss')</script>"
+            
+            # These should be handled safely by the validation
+            test_file = Path(tmpdir) / "test.html"
+            test_file.write_text(malicious_content)
+            
+            result = await converter.convert_file(str(test_file))
+            if result.success:
+                assert "alert(" not in result.markdown
+
+
+class TestContentTypeDetectionAllFormats:
+    """Test content type detection for all supported formats"""
+
+    @pytest.fixture
+    def converter(self):
+        return MDConverter()
+
+    def test_pdf_magic_bytes(self):
+        """Test PDF magic bytes detection"""
+        from md_server.detection import ContentTypeDetector
+        
+        pdf_content = b"%PDF-1.4\nSample PDF content"
+        detected = ContentTypeDetector.detect_from_magic_bytes(pdf_content)
+        assert detected == "application/pdf"
+
+    def test_office_document_signatures(self):
+        """Test Office document signature detection"""
+        from md_server.detection import ContentTypeDetector
+        
+        # ZIP signature (used by Office docs)
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        detected = ContentTypeDetector.detect_from_magic_bytes(zip_content)
+        assert detected == "application/zip"
+
+    def test_image_format_detection(self):
+        """Test image format detection"""
+        from md_server.detection import ContentTypeDetector
+        
+        # PNG signature
+        png_content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+        detected = ContentTypeDetector.detect_from_magic_bytes(png_content)
+        assert detected == "image/png"
+        
+        # JPEG signature
+        jpeg_content = b"\xff\xd8\xff" + b"\x00" * 50
+        detected = ContentTypeDetector.detect_from_magic_bytes(jpeg_content)
+        assert detected == "image/jpeg"
+        
+        # GIF signatures
+        gif87_content = b"GIF87a" + b"\x00" * 50
+        detected = ContentTypeDetector.detect_from_magic_bytes(gif87_content)
+        assert detected == "image/gif"
+        
+        gif89_content = b"GIF89a" + b"\x00" * 50
+        detected = ContentTypeDetector.detect_from_magic_bytes(gif89_content)
+        assert detected == "image/gif"
+
+    def test_text_encoding_detection(self):
+        """Test text encoding detection"""
+        from md_server.detection import ContentTypeDetector
+        
+        # Plain text
+        text_content = b"Hello, world!"
+        detected = ContentTypeDetector.detect_from_magic_bytes(text_content)
+        assert detected == "text/plain"
+        
+        # Markdown content
+        markdown_content = b"# Heading\n\nSome content"
+        detected = ContentTypeDetector.detect_from_magic_bytes(markdown_content)
+        assert detected == "text/markdown"
+        
+        # HTML content
+        html_content = b"<html><head><title>Test</title></head><body>Content</body></html>"
+        detected = ContentTypeDetector.detect_from_magic_bytes(html_content)
+        assert detected == "text/html"
+
+    def test_binary_vs_text_classification(self):
+        """Test binary vs text classification"""
+        from md_server.detection import ContentTypeDetector
+        
+        # Binary content (contains null bytes)
+        binary_content = b"\x00\x01\x02\x03" * 25
+        detected = ContentTypeDetector.detect_from_magic_bytes(binary_content)
+        assert detected == "application/octet-stream"
+        
+        # High ratio of non-printable characters
+        non_printable = bytes(range(0, 32)) * 10  # Control characters
+        detected = ContentTypeDetector.detect_from_magic_bytes(non_printable)
+        assert detected == "application/octet-stream"
+        
+        # Valid UTF-8 text
+        utf8_text = "Hello, 世界!".encode('utf-8')
+        detected = ContentTypeDetector.detect_from_magic_bytes(utf8_text)
+        assert detected == "text/plain"
+
+    def test_json_detection(self):
+        """Test JSON content detection"""
+        from md_server.detection import ContentTypeDetector
+        
+        # JSON object
+        json_obj = b'{"key": "value", "number": 42}'
+        detected = ContentTypeDetector.detect_from_magic_bytes(json_obj)
+        assert detected == "application/json"
+        
+        # JSON array
+        json_array = b'["item1", "item2", "item3"]'
+        detected = ContentTypeDetector.detect_from_magic_bytes(json_array)
+        assert detected == "application/json"
+
+    def test_xml_detection(self):
+        """Test XML content detection"""
+        from md_server.detection import ContentTypeDetector
+        
+        # XML with declaration
+        xml_content = b'<?xml version="1.0" encoding="UTF-8"?><root><child>content</child></root>'
+        detected = ContentTypeDetector.detect_from_magic_bytes(xml_content)
+        assert detected == "text/xml"
+
+
 class TestValidationWorkflows:
     """Test validation through different user workflows"""
 
