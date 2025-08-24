@@ -41,7 +41,7 @@ def test_server(server_port: int) -> Generator[str, None, None]:
         [sys.executable, "-m", "md_server", "--port", str(server_port)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env={**os.environ, "MD_SERVER_DEBUG": "false"}
+        env={**os.environ, "MD_SERVER_DEBUG": "false"},
     )
 
     server_url = f"http://127.0.0.1:{server_port}"
@@ -74,16 +74,12 @@ def test_server(server_port: int) -> Generator[str, None, None]:
 def auth_server(auth_port: int) -> Generator[tuple[str, str], None, None]:
     """Session-scoped real server fixture with API key authentication."""
     api_key = "test-api-key-12345"
-    
+
     server_process = subprocess.Popen(
         [sys.executable, "-m", "md_server", "--port", str(auth_port)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env={
-            **os.environ, 
-            "MD_SERVER_API_KEY": api_key,
-            "MD_SERVER_DEBUG": "false"
-        }
+        env={**os.environ, "MD_SERVER_API_KEY": api_key, "MD_SERVER_DEBUG": "false"},
     )
 
     server_url = f"http://127.0.0.1:{auth_port}"
@@ -104,7 +100,9 @@ def auth_server(auth_port: int) -> Generator[tuple[str, str], None, None]:
     if not server_ready:
         server_process.terminate()
         server_process.wait()
-        raise RuntimeError(f"Authenticated test server failed to start on port {auth_port}")
+        raise RuntimeError(
+            f"Authenticated test server failed to start on port {auth_port}"
+        )
 
     yield server_url, api_key
 
@@ -168,7 +166,7 @@ def sample_image(test_data_dir: Path) -> Path:
 
 class DelayedHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     """HTTP handler that adds delays for timeout testing."""
-    
+
     def do_GET(self):
         if self.path == "/delay.html":
             # Add a 2-second delay for timeout testing
@@ -180,24 +178,24 @@ class DelayedHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 def http_test_server() -> Generator[str, None, None]:
     """Session-scoped HTTP server serving test files from test_data directory."""
     test_data_dir = Path(__file__).parent / "test_data"
-    
+
     # Change to test_data directory for serving files
     original_cwd = os.getcwd()
     os.chdir(test_data_dir)
-    
+
     try:
         port = find_free_port()
         handler = DelayedHTTPRequestHandler
-        
+
         with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
             # Start server in background thread
             server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
             server_thread.start()
-            
+
             # Wait for server to be ready
             server_url = f"http://127.0.0.1:{port}"
             server_ready = False
-            
+
             for attempt in range(10):  # 10 second timeout
                 time.sleep(0.5)
                 try:
@@ -207,17 +205,17 @@ def http_test_server() -> Generator[str, None, None]:
                         break
                 except requests.exceptions.RequestException:
                     pass
-            
+
             if not server_ready:
                 httpd.shutdown()
                 raise RuntimeError(f"HTTP test server failed to start on port {port}")
-            
+
             yield server_url
-            
+
             # Cleanup
             httpd.shutdown()
             server_thread.join(timeout=5)
-    
+
     finally:
         # Restore original working directory
         os.chdir(original_cwd)

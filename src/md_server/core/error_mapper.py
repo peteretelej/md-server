@@ -23,10 +23,10 @@ from ..sdk.exceptions import (
 
 def map_conversion_error(error: Exception) -> Tuple[str, str, int, list]:
     """Map SDK exceptions to HTTP error responses.
-    
+
     Args:
         error: SDK exception to map
-        
+
     Returns:
         Tuple of (error_code, message, status_code, suggestions)
     """
@@ -35,51 +35,51 @@ def map_conversion_error(error: Exception) -> Tuple[str, str, int, list]:
             "INVALID_INPUT",
             str(error),
             HTTP_400_BAD_REQUEST,
-            ["Check input format", "Verify request structure"]
+            ["Check input format", "Verify request structure"],
         )
     elif isinstance(error, FileSizeError):
         return (
             "FILE_TOO_LARGE",
             str(error),
             HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            ["Use a smaller file", "Check size limits at /formats"]
+            ["Use a smaller file", "Check size limits at /formats"],
         )
     elif isinstance(error, UnsupportedFormatError):
         return (
             "UNSUPPORTED_FORMAT",
             str(error),
             HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            ["Check supported formats at /formats"]
+            ["Check supported formats at /formats"],
         )
     elif isinstance(error, TimeoutError):
         return (
             "TIMEOUT",
             str(error),
             HTTP_408_REQUEST_TIMEOUT,
-            ["Try with a smaller file", "Increase timeout in options"]
+            ["Try with a smaller file", "Increase timeout in options"],
         )
     elif isinstance(error, NetworkError):
         return (
             "NETWORK_ERROR",
             str(error),
             HTTP_400_BAD_REQUEST,
-            ["Check URL accessibility", "Verify network connectivity"]
+            ["Check URL accessibility", "Verify network connectivity"],
         )
     else:  # ConversionError or generic
         return (
             "CONVERSION_FAILED",
             str(error),
             HTTP_500_INTERNAL_SERVER_ERROR,
-            ["Check input format", "Contact support if issue persists"]
+            ["Check input format", "Contact support if issue persists"],
         )
 
 
 def map_value_error(error_msg: str) -> Tuple[str, int, list]:
     """Map ValueError messages to HTTP error responses.
-    
+
     Args:
         error_msg: Error message to classify
-        
+
     Returns:
         Tuple of (error_code, status_code, suggestions)
     """
@@ -110,19 +110,21 @@ def map_value_error(error_msg: str) -> Tuple[str, int, list]:
 
     # Default ValueError handling
     return (
-        "INVALID_INPUT", 
-        HTTP_400_BAD_REQUEST, 
-        ["Check input format", "Verify JSON structure"]
+        "INVALID_INPUT",
+        HTTP_400_BAD_REQUEST,
+        ["Check input format", "Verify JSON structure"],
     )
 
 
-def map_generic_error(error_msg: str, format_type: str = None) -> Tuple[str, int, Dict[str, Any], list]:
+def map_generic_error(
+    error_msg: str, format_type: str = None
+) -> Tuple[str, int, Dict[str, Any], list]:
     """Map generic exceptions to HTTP error responses.
-    
+
     Args:
         error_msg: Error message to classify
         format_type: Optional detected format type
-        
+
     Returns:
         Tuple of (error_code, status_code, details, suggestions)
     """
@@ -132,25 +134,27 @@ def map_generic_error(error_msg: str, format_type: str = None) -> Tuple[str, int
             "UNSUPPORTED_FORMAT",
             HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             details,
-            ["Check supported formats at /formats"]
+            ["Check supported formats at /formats"],
         )
 
     return (
         "CONVERSION_FAILED",
         HTTP_500_INTERNAL_SERVER_ERROR,
         {},
-        ["Check input format", "Contact support if issue persists"]
+        ["Check input format", "Contact support if issue persists"],
     )
 
 
-def calculate_source_size(input_type: str, content_data: dict, request_data: dict) -> int:
+def calculate_source_size(
+    input_type: str, content_data: dict, request_data: dict
+) -> int:
     """Calculate source content size for different input types.
-    
+
     Args:
         input_type: Type of input (json_url, json_text, etc.)
         content_data: Parsed content data
         request_data: Original request data
-        
+
     Returns:
         Size in bytes
     """

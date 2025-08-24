@@ -22,7 +22,12 @@ from .sdk.exceptions import (
     UnsupportedFormatError,
 )
 from .core.config import Settings
-from .core.error_mapper import map_conversion_error, map_value_error, map_generic_error, calculate_source_size
+from .core.error_mapper import (
+    map_conversion_error,
+    map_value_error,
+    map_generic_error,
+    calculate_source_size,
+)
 from .detection import ContentTypeDetector
 
 
@@ -179,18 +184,18 @@ class ConvertController(Controller):
         error_response = ErrorResponse.create_error(
             code=code, message=error_msg, suggestions=suggestions
         )
-        raise HTTPException(
-            status_code=status_code, detail=error_response.model_dump()
-        )
+        raise HTTPException(status_code=status_code, detail=error_response.model_dump())
 
     def _handle_generic_error(self, error_msg: str, format_type: str = None) -> None:
         """Handle generic exceptions"""
-        code, status_code, details, suggestions = map_generic_error(error_msg, format_type)
+        code, status_code, details, suggestions = map_generic_error(
+            error_msg, format_type
+        )
         error_response = ErrorResponse.create_error(
             code=code,
             message=f"Conversion failed: {error_msg}",
             details=details,
-            suggestions=suggestions
+            suggestions=suggestions,
         )
         raise HTTPException(
             status_code=status_code,

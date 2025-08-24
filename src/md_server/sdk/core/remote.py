@@ -121,8 +121,6 @@ def merge_request_options(
     return {"options": request_options} if request_options else {}
 
 
-
-
 def encode_file_content(content: bytes) -> str:
     """Encode file content as base64 string."""
     return base64.b64encode(content).decode("utf-8")
@@ -162,5 +160,3 @@ def parse_http_error_response(
             return ConversionError(f"HTTP {status_code}: {response_text}")
     except (KeyError, TypeError):
         return ConversionError(f"HTTP {status_code}: {response_text}")
-
-
