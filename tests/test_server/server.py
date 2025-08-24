@@ -1,8 +1,45 @@
-import asyncio
 import threading
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import socket
+import time
+
+
+class TestRequestHandler(SimpleHTTPRequestHandler):
+    """Custom request handler for testing specific scenarios"""
+
+    def do_GET(self):
+        # Handle special test endpoints
+        if self.path == "/timeout":
+            # Simulate timeout by taking too long
+            time.sleep(10)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"<html><body><h1>Timeout Test</h1></body></html>")
+            return
+        elif self.path == "/forbidden":
+            # Simulate blocked/forbidden access
+            self.send_response(403)
+            self.end_headers()
+            self.wfile.write(b"<html><body><h1>403 Forbidden</h1></body></html>")
+            return
+        elif self.path == "/server-error":
+            # Simulate server error
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(
+                b"<html><body><h1>500 Internal Server Error</h1></body></html>"
+            )
+            return
+        elif self.path == "/bad-request":
+            # Simulate bad request
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(b"<html><body><h1>400 Bad Request</h1></body></html>")
+            return
+
+        # Default behavior for normal files
+        super().do_GET()
 
 
 class TestHTTPServer:
@@ -28,9 +65,8 @@ class TestHTTPServer:
 
             os.chdir(self.directory)
 
-            with HTTPServer(
-                ("127.0.0.1", self.port), SimpleHTTPRequestHandler
-            ) as httpd:
+            with HTTPServer(("127.0.0.1", self.port), TestRequestHandler) as httpd:
+                httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 self.actual_port = httpd.server_address[1]
                 self.server = httpd
                 try:
@@ -44,9 +80,11 @@ class TestHTTPServer:
         self.thread.start()
 
         # Wait for server to start
+        import time
+
         timeout = 5
         while timeout > 0 and self.actual_port is None:
-            asyncio.sleep(0.1)
+            time.sleep(0.1)
             timeout -= 0.1
 
         return self.actual_port
@@ -76,7 +114,22 @@ class TestHTTPServer:
 
 
 def get_free_port() -> int:
-    """Get a free port for testing"""
+    """Get a free port for testing in the safe range 50111-65535"""
+    import random
+
+    # Try to find a free port in the safe high range
+    for attempt in range(100):  # Try up to 100 times
+        port = random.randint(50111, 60000)  # Safe high port range
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("127.0.0.1", port))
+                return port
+        except OSError:
+            continue
+
+    # Fallback to system-assigned port if nothing available in range
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]

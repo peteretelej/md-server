@@ -17,11 +17,14 @@ class URLValidator:
         url = url.strip()
         parsed = urlparse(url)
 
-        if not parsed.scheme or not parsed.netloc:
+        if not parsed.scheme:
             raise ValidationError("Invalid URL format")
 
         if parsed.scheme.lower() not in ["http", "https"]:
             raise ValidationError("Only HTTP/HTTPS URLs allowed")
+
+        if not parsed.netloc:
+            raise ValidationError("Invalid URL format")
 
         return url
 
@@ -90,11 +93,11 @@ class MimeTypeValidator:
         if "/" not in mime_type:
             raise ValidationError("MIME type must contain '/' separator")
 
-        if mime_type.count("/") != 1:
-            raise ValidationError("MIME type must contain exactly one '/' separator")
-
         if ".." in mime_type or "\\" in mime_type:
             raise ValidationError("Invalid characters in MIME type")
+
+        if mime_type.count("/") != 1:
+            raise ValidationError("MIME type must contain exactly one '/' separator")
 
         return mime_type.strip().lower()
 

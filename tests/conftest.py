@@ -37,9 +37,9 @@ def test_jpg_file(test_data_dir):
 
 @pytest.fixture(scope="session")
 def test_server():
-    from tests.test_server.server import TestHTTPServer
+    from tests.test_server.server import TestHTTPServer, get_free_port
 
-    server = TestHTTPServer()
+    server = TestHTTPServer(port=get_free_port())
     server.start()
     yield server
     server.stop()

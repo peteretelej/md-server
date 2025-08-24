@@ -3,11 +3,20 @@ import base64
 from litestar.testing import TestClient
 
 from md_server.app import app
+from tests.test_server.server import TestHTTPServer
 
 
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def test_server():
+    server = TestHTTPServer()
+    server.start()
+    yield server
+    server.stop()
 
 
 class TestHealthEndpoint:
@@ -53,9 +62,9 @@ class TestConvertUnifiedEndpoint:
         assert data["success"] is True
         assert "HTML Text" in data["markdown"]
 
-    def test_convert_url_success(self, client):
+    def test_convert_url_success(self, client, test_server):
         # Use a simple URL that should work
-        response = client.post("/convert", json={"url": "https://httpbin.org/html"})
+        response = client.post("/convert", json={"url": test_server.url("simple.html")})
         # This might fail in CI without internet, so accept either success or failure
         assert response.status_code in [200, 500, 422]
 
@@ -130,9 +139,9 @@ class TestErrorHandling:
 class TestAdvancedErrorPaths:
     """Test advanced error handling paths for edge cases"""
 
-    def test_network_error_url_conversion(self, client):
+    def test_network_error_url_conversion(self, client, test_server):
         response = client.post(
-            "/convert", json={"url": "http://nonexistent-domain-12345.invalid"}
+            "/convert", json={"url": test_server.url("nonexistent.html")}
         )
         assert response.status_code in [400, 500]
         data = response.json()
@@ -144,7 +153,7 @@ class TestAdvancedErrorPaths:
 
     def test_connection_error_simulation(self, client):
         response = client.post(
-            "/convert", json={"url": "http://127.0.0.1:99999/nonexistent"}
+            "/convert", json={"url": "http://127.0.0.1:1/nonexistent"}
         )
         assert response.status_code in [400, 500]
         data = response.json()
@@ -210,8 +219,8 @@ class TestAdvancedErrorPaths:
         )
         assert response.status_code in [400, 422]
 
-    def test_timeout_simulation_large_url(self, client):
-        response = client.post("/convert", json={"url": "https://httpbin.org/delay/30"})
+    def test_timeout_simulation_large_url(self, client, test_server):
+        response = client.post("/convert", json={"url": test_server.url("large.html")})
         assert response.status_code in [200, 400, 408, 500]
 
     def test_generic_exception_handling(self, client):
@@ -247,15 +256,16 @@ class TestValidationErrorMapping:
             # Litestar default error format is acceptable
             assert data.get("status_code") in [400, 413, 500]
 
-    def test_blocked_url_error_mapping(self, client):
-        private_urls = [
-            "http://127.0.0.1/test",
-            "http://localhost/test",
-            "http://10.0.0.1/test",
-            "http://192.168.1.1/test",
+    def test_blocked_url_error_mapping(self, client, test_server):
+        # Test various error scenarios using local test server
+        error_endpoints = [
+            test_server.url("forbidden"),  # 403 Forbidden
+            test_server.url("server-error"),  # 500 Internal Server Error
+            test_server.url("bad-request"),  # 400 Bad Request
+            test_server.url("nonexistent.html"),  # 404 Not Found
         ]
 
-        for url in private_urls:
+        for url in error_endpoints:
             response = client.post("/convert", json={"url": url})
             assert response.status_code in [200, 400, 500]
 
@@ -411,16 +421,16 @@ class TestFileNotFoundErrors:
         # May pass with empty content or fail - both are acceptable
         assert response.status_code in [200, 400, 422]
 
-    def test_url_with_file_not_found_response(self, client):
+    def test_url_with_file_not_found_response(self, client, test_server):
         response = client.post(
-            "/convert", json={"url": "https://httpbin.org/status/404"}
+            "/convert", json={"url": test_server.url("nonexistent.html")}
         )
         # URL exists but returns 404, may be handled differently
         assert response.status_code in [200, 400, 404, 500]
 
-    def test_broken_url_simulation(self, client):
+    def test_broken_url_simulation(self, client, test_server):
         broken_urls = [
-            "https://does-not-exist-domain-404.invalid/file.pdf",
+            test_server.url("nonexistent.html"),
             "http://127.0.0.1:1/nonexistent.pdf",
         ]
 

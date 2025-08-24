@@ -31,32 +31,35 @@ class TestPortAvailability:
 
 
 class TestCLIMain:
-    @patch("md_server.__main__.uvicorn.run")
     @patch("sys.argv", ["md_server"])
-    def test_main_default_args(self, mock_uvicorn_run):
+    @patch("md_server.__main__.is_port_available", return_value=True)
+    @patch("md_server.__main__.uvicorn.run")
+    def test_main_default_args(self, mock_uvicorn_run, mock_port_available):
         main()
         mock_uvicorn_run.assert_called_once()
         call_args = mock_uvicorn_run.call_args
         assert call_args.kwargs["host"] == "127.0.0.1"
         assert call_args.kwargs["port"] == 8080
 
-    @patch("md_server.__main__.uvicorn.run")
     @patch("sys.argv", ["md_server", "--host", "0.0.0.0", "--port", "9011"])
-    def test_main_custom_args(self, mock_uvicorn_run):
+    @patch("md_server.__main__.is_port_available", return_value=True)
+    @patch("md_server.__main__.uvicorn.run")
+    def test_main_custom_args(self, mock_uvicorn_run, mock_port_available):
         main()
         mock_uvicorn_run.assert_called_once()
         call_args = mock_uvicorn_run.call_args
         assert call_args.kwargs["host"] == "0.0.0.0"
         assert call_args.kwargs["port"] == 9011
 
-    @patch("md_server.__main__.uvicorn.run")
-    @patch("md_server.__main__.is_port_available")
     @patch("sys.argv", ["md_server", "--port", "8080"])
-    def test_main_port_busy_warning(self, mock_is_port_available, mock_uvicorn_run):
+    @patch("md_server.__main__.is_port_available")
+    @patch("md_server.__main__.uvicorn.run")
+    def test_main_port_busy_warning(self, mock_uvicorn_run, mock_is_port_available):
         mock_is_port_available.return_value = False
 
-        with patch("builtins.print") as mock_print:
+        with patch("builtins.print") as mock_print, patch("sys.exit") as mock_exit:
             main()
+            mock_exit.assert_called_once_with(1)
 
         # Should print a warning about port being busy
         any(
