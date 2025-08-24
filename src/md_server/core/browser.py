@@ -3,11 +3,8 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig
 
 
 class BrowserChecker:
-    """Browser availability detection for Crawl4AI/Playwright"""
-
     @staticmethod
     async def is_available() -> bool:
-        """Check if Playwright browsers are available"""
         try:
             browser_config = BrowserConfig(
                 browser_type="chromium",
@@ -29,7 +26,6 @@ class BrowserChecker:
 
     @staticmethod
     def log_availability(available: bool) -> None:
-        """Log browser availability status"""
         if available:
             logging.info(
                 "URL Conversion: Using Crawl4AI with Playwright browsers (JavaScript support enabled)"

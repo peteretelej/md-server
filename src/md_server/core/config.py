@@ -1,3 +1,4 @@
+import logging
 from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 from typing import List, Optional
@@ -55,3 +56,7 @@ class Settings(BaseSettings):
 
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_logger(name: str) -> logging.Logger:
+    return logging.getLogger(f"md_server.core.{name}")

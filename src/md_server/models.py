@@ -65,6 +65,18 @@ class ConversionMetadata(BaseModel):
     warnings: List[str] = Field(default_factory=list, description="Conversion warnings")
 
 
+class ConversionResult(BaseModel):
+    """Result of a document conversion operation from core converter."""
+
+    success: bool = Field(description="Whether conversion was successful")
+    markdown: str = Field(description="Converted markdown content")
+    metadata: ConversionMetadata = Field(description="Conversion metadata")
+    request_id: str = Field(
+        default_factory=lambda: f"req_{uuid.uuid4()}",
+        description="Unique request identifier",
+    )
+
+
 class ConvertResponse(BaseModel):
     success: bool = Field(description="Whether conversion was successful")
     markdown: str = Field(description="Converted markdown content")
@@ -142,9 +154,17 @@ class FormatCapabilities(BaseModel):
     max_size_mb: int = Field(description="Maximum file size in MB")
 
 
+class SystemCapabilities(BaseModel):
+    browser_available: bool = Field(description="Whether browser support is available")
+
+
 class FormatsResponse(BaseModel):
     formats: Dict[str, FormatCapabilities] = Field(
         description="Supported formats and their capabilities"
+    )
+    supported_formats: List[str] = Field(description="List of supported format names")
+    capabilities: SystemCapabilities = Field(
+        description="System capability information"
     )
 
 

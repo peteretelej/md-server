@@ -5,8 +5,6 @@ from pathlib import Path
 
 
 class ContentTypeDetector:
-    """Detect input type and format from various sources"""
-
     # Magic byte signatures for common file types
     MAGIC_BYTES = {
         b"%PDF-": "application/pdf",
@@ -36,7 +34,6 @@ class ContentTypeDetector:
     def detect_from_content_type_header(
         cls, content_type: Optional[str]
     ) -> Optional[str]:
-        """Detect format from Content-Type header"""
         if not content_type:
             return None
 
@@ -46,7 +43,6 @@ class ContentTypeDetector:
 
     @classmethod
     def detect_from_filename(cls, filename: Optional[str]) -> Optional[str]:
-        """Detect format from filename extension"""
         if not filename:
             return None
 
@@ -56,7 +52,6 @@ class ContentTypeDetector:
 
     @classmethod
     def detect_from_magic_bytes(cls, content: bytes) -> Optional[str]:
-        """Detect format from magic bytes at start of content"""
         if not content:
             return "text/plain"  # Empty content defaults to text/plain
 
@@ -76,17 +71,43 @@ class ContentTypeDetector:
         # Check if it's likely text
         try:
             text = content.decode("utf-8")
+
+            # Check for binary content indicators
+            if b"\x00" in content:  # Null bytes are strong indicator of binary
+                return "application/octet-stream"
+
+            # Check for high ratio of non-printable characters
+            non_printable_count = sum(
+                1 for byte in content if byte < 32 and byte not in [9, 10, 13]
+            )
+            if len(content) > 0 and non_printable_count / len(content) > 0.3:
+                return "application/octet-stream"
+
             if text.strip().startswith("#") or text.strip().startswith("*"):
                 return "text/markdown"
             return "text/plain"
         except UnicodeDecodeError:
-            pass
+            return "application/octet-stream"
+
+        return None
+
+    @classmethod
+    def detect_from_content(
+        cls, content: bytes, filename: Optional[str] = None
+    ) -> Optional[str]:
+        # Try magic bytes detection first
+        magic_result = cls.detect_from_magic_bytes(content)
+        if magic_result:
+            return magic_result
+
+        # Fall back to filename detection if provided
+        if filename:
+            return cls.detect_from_filename(filename)
 
         return None
 
     @classmethod
     def _detect_office_format(cls, content: bytes) -> str:
-        """Detect specific Office format from ZIP content"""
         # This is a simplified detection - in a full implementation,
         # you would parse the ZIP structure to look for specific files
         # For now, return generic zip type
@@ -100,15 +121,6 @@ class ContentTypeDetector:
         content: Optional[bytes] = None,
         request_data: Optional[Dict] = None,
     ) -> Tuple[str, str]:
-        """
-        Detect input type and format
-
-        Returns:
-            Tuple[input_type, format] where:
-            - input_type: 'binary', 'multipart', 'json_url', 'json_content', 'json_text', 'json_text_typed'
-            - format: detected MIME type or format
-        """
-
         # If we have JSON request data, determine JSON input type
         if request_data:
             if "url" in request_data:
@@ -157,7 +169,6 @@ class ContentTypeDetector:
 
     @classmethod
     def get_source_type(cls, mime_type: str) -> str:
-        """Convert MIME type to source type for metadata"""
         mime_to_source = {
             "application/pdf": "pdf",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -179,7 +190,6 @@ class ContentTypeDetector:
 
     @classmethod
     def is_supported_format(cls, mime_type: str) -> bool:
-        """Check if format is supported for conversion"""
         supported_formats = [
             "application/pdf",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -200,7 +210,6 @@ class ContentTypeDetector:
 
     @classmethod
     def get_supported_formats(cls) -> dict:
-        """Get supported formats with their capabilities"""
         return {
             "pdf": {
                 "mime_types": ["application/pdf"],

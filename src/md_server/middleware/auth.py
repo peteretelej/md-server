@@ -46,7 +46,7 @@ def create_auth_middleware(settings: Settings):
 
         class ConfiguredAPIKeyMiddleware(APIKeyMiddleware):
             def __init__(self, app: ASGIApp):
-                super().__init__(app, exclude_paths={"/healthz"})
+                super().__init__(app, exclude_paths={"/health", "/healthz"})
 
         return ConfiguredAPIKeyMiddleware
     return None

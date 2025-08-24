@@ -1,28 +1,36 @@
 from urllib.parse import urlparse
+from typing import Optional
+
+
+class ValidationError(Exception):
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message)
+        self.details = details or {}
 
 
 class URLValidator:
-    """Basic URL validation for document conversion"""
-
     @classmethod
     def validate_url(cls, url: str) -> str:
-        """Validate URL format for document conversion"""
-        parsed = urlparse(url.strip())
+        if not url or not url.strip():
+            raise ValidationError("URL cannot be empty")
 
-        if not parsed.scheme or not parsed.netloc:
-            raise ValueError("Invalid URL format")
+        url = url.strip()
+        parsed = urlparse(url)
+
+        if not parsed.scheme:
+            raise ValidationError("Invalid URL format")
 
         if parsed.scheme.lower() not in ["http", "https"]:
-            raise ValueError("Only HTTP/HTTPS URLs allowed")
+            raise ValidationError("Only HTTP/HTTPS URLs allowed")
+
+        if not parsed.netloc:
+            raise ValidationError("Invalid URL format")
 
         return url
 
 
 class FileSizeValidator:
-    """File size validation by content type"""
-
-    # Default size limits in bytes (50MB general, specific limits for types)
-    DEFAULT_MAX_SIZE = 50 * 1024 * 1024
+    DEFAULT_MAX_SIZE = 50 * 1024 * 1024  # 50MB default
 
     FORMAT_LIMITS = {
         "application/pdf": 50 * 1024 * 1024,  # 50MB for PDFs
@@ -45,26 +53,57 @@ class FileSizeValidator:
     }
 
     @classmethod
-    def validate_size(cls, content_size: int, content_type: str = None) -> None:
-        """Validate content size against limits"""
+    def validate_size(
+        cls,
+        content_size: int,
+        content_type: Optional[str] = None,
+        max_size_mb: Optional[int] = None,
+    ) -> None:
         if content_size <= 0:
             return
 
-        # Get limit for specific content type or use default
-        limit = cls.FORMAT_LIMITS.get(content_type, cls.DEFAULT_MAX_SIZE)
+        # Use custom limit if provided, otherwise use format-specific limit
+        if max_size_mb:
+            limit = max_size_mb * 1024 * 1024
+        else:
+            limit = cls.FORMAT_LIMITS.get(content_type or "", cls.DEFAULT_MAX_SIZE)
 
         if content_size > limit:
             limit_mb = limit / (1024 * 1024)
             actual_mb = content_size / (1024 * 1024)
-            raise ValueError(
-                f"File size {actual_mb:.1f}MB exceeds limit of {limit_mb:.0f}MB for {content_type or 'this format'}"
+            raise ValidationError(
+                f"File size {actual_mb:.1f}MB exceeds limit of {limit_mb:.0f}MB for {content_type or 'this format'}",
+                {
+                    "file_size": content_size,
+                    "limit": limit,
+                    "content_type": content_type,
+                },
             )
 
 
-class ContentValidator:
-    """Content validation using magic bytes"""
+class MimeTypeValidator:
+    @classmethod
+    def validate_mime_type(cls, mime_type: str) -> str:
+        if not mime_type:
+            raise ValidationError("MIME type cannot be empty")
 
-    # Common file signatures (magic bytes)
+        if len(mime_type) > 100:
+            raise ValidationError("MIME type too long (max 100 characters)")
+
+        if "/" not in mime_type:
+            raise ValidationError("MIME type must contain '/' separator")
+
+        if ".." in mime_type or "\\" in mime_type:
+            raise ValidationError("Invalid characters in MIME type")
+
+        if mime_type.count("/") != 1:
+            raise ValidationError("MIME type must contain exactly one '/' separator")
+
+        return mime_type.strip().lower()
+
+
+class ContentValidator:
+    # Magic byte signatures for file type detection
     MAGIC_BYTES = {
         b"\x25\x50\x44\x46": "application/pdf",  # PDF
         b"\x50\x4b\x03\x04": "application/zip",  # ZIP (includes DOCX, XLSX, PPTX)
@@ -83,16 +122,13 @@ class ContentValidator:
 
     @classmethod
     def detect_content_type(cls, content: bytes) -> str:
-        """Detect content type from magic bytes"""
         if not content:
             return "application/octet-stream"
 
-        # Check against known magic bytes
         for magic, content_type in cls.MAGIC_BYTES.items():
             if content.startswith(magic):
                 return content_type
 
-        # Check for text content (UTF-8)
         try:
             content[:1024].decode("utf-8")
             return "text/plain"
@@ -102,57 +138,35 @@ class ContentValidator:
         return "application/octet-stream"
 
     @classmethod
-    def validate_content_type(cls, content: bytes, declared_type: str = None) -> str:
-        """Validate that declared content type matches detected type"""
+    def validate_content_type(
+        cls, content: bytes, declared_type: Optional[str] = None
+    ) -> str:
         detected_type = cls.detect_content_type(content)
 
-        # If no declared type, return detected
         if not declared_type:
             return detected_type
 
-        # Handle Office documents (ZIP-based)
+        # Handle Office documents (ZIP-based formats)
         if detected_type == "application/zip" and declared_type in [
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ]:
-            # Accept Office docs as ZIP-based
             return declared_type
 
-        # Handle generic cases
         if detected_type == "application/octet-stream":
-            # Can't detect, trust declared type
             return declared_type
 
-        # Strict matching for security-sensitive types
-        security_sensitive = ["application/pdf", "text/html", "image/png", "image/jpeg"]
+        # For text types, be more permissive as detection can be inaccurate
+        if declared_type.startswith("text/") and detected_type == "text/plain":
+            return declared_type
+
+        # Strict matching for security-sensitive binary types only
+        security_sensitive = ["application/pdf", "image/png", "image/jpeg"]
         if declared_type in security_sensitive and detected_type != declared_type:
-            raise ValueError(
-                f"Content type mismatch: declared {declared_type} but detected {detected_type}"
+            raise ValidationError(
+                f"Content type mismatch: declared {declared_type} but detected {detected_type}",
+                {"declared": declared_type, "detected": detected_type},
             )
 
         return declared_type
-
-
-class MimeTypeValidator:
-    """MIME type validation for text content"""
-
-    @classmethod
-    def validate_mime_type(cls, mime_type: str) -> str:
-        """Validate MIME type format and security"""
-        if not mime_type:
-            raise ValueError("MIME type cannot be empty")
-
-        if len(mime_type) > 100:
-            raise ValueError("MIME type too long (max 100 characters)")
-
-        if "/" not in mime_type:
-            raise ValueError("MIME type must contain '/' separator")
-
-        if mime_type.count("/") != 1:
-            raise ValueError("MIME type must contain exactly one '/' separator")
-
-        if ".." in mime_type or "\\" in mime_type:
-            raise ValueError("Invalid characters in MIME type")
-
-        return mime_type.strip().lower()

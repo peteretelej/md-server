@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Test Page</title>
+</head>
+<body>
+    <h1>JavaScript Test Page</h1>
+    <p>This page contains JavaScript-rendered content.</p>
+    <div id="dynamic-content">Loading...</div>
+    
+    <script>
+        setTimeout(function() {
+            document.getElementById('dynamic-content').innerHTML = 
+                '<h2>Dynamic Content</h2><p>This content was loaded via JavaScript.</p>';
+        }, 100);
+    </script>
+</body>
+</html>
