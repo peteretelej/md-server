@@ -1668,6 +1668,7 @@ dependencies = [
     { name = "crawl4ai" },
     { name = "litestar", extra = ["standard"] },
     { name = "markitdown", extra = ["all"] },
+    { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
 ]
@@ -1688,6 +1689,7 @@ requires-dist = [
     { name = "crawl4ai", specifier = ">=0.7.0" },
     { name = "litestar", extras = ["standard"], specifier = ">=2.0.0" },
     { name = "markitdown", extras = ["all"], specifier = ">=0.0.1" },
+    { name = "psutil", specifier = ">=7.0.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
 ]

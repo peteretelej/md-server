@@ -1,11 +1,11 @@
 # MD Server Python SDK
 
-Python SDK for document to markdown conversion using md-server.
+Simplified Python SDK for document to markdown conversion using md-server.
 
 ## Installation
 
 ```bash
-pip install md-server
+pip install md-server[sdk]
 ```
 
 ## Quick Start
@@ -13,7 +13,7 @@ pip install md-server
 ### Local Conversion
 
 ```python
-from md_server import MDConverter
+from md_server.sdk import MDConverter
 
 # Create converter with default settings
 converter = MDConverter()
@@ -24,19 +24,21 @@ result = await converter.convert_url("https://example.com")
 result = await converter.convert_text("<h1>HTML</h1>", mime_type="text/html")
 
 print(result.markdown)
-print(f"Processed {result.metadata.source_size} bytes in {result.metadata.processing_time:.2f}s")
+print(f"Processed {result.metadata.source_size} bytes in {result.metadata.conversion_time_ms}ms")
 ```
 
 ### Remote Conversion
 
 ```python
+from md_server.sdk import RemoteMDConverter
+
 # Connect to remote md-server instance
-converter = MDConverter.remote(
+async with RemoteMDConverter(
     endpoint="https://api.example.com",
     api_key="your-api-key"
-)
-
-result = await converter.convert_file("document.pdf")
+) as client:
+    result = await client.convert_file("document.pdf")
+    print(result.markdown)
 ```
 
 ## Configuration
@@ -71,7 +73,9 @@ converter = MDConverter(
 ### Remote Converter Options
 
 ```python
-converter = MDConverter.remote(
+from md_server.sdk import RemoteMDConverter
+
+client = RemoteMDConverter(
     endpoint="https://your-md-server.com",
     api_key="your-api-key",
     timeout=30  # HTTP request timeout
@@ -192,17 +196,23 @@ result = converter.convert_text_sync("<h1>HTML</h1>", mime_type="text/html")
 
 ## Error Handling
 
-### Exception Types
+### Exception Handling
+
+The simplified SDK uses standard Python exceptions:
 
 ```python
-from md_server import (
-    ConversionError,      # Base conversion error
-    InvalidInputError,    # Invalid input format/content
-    NetworkError,         # Network/connectivity issues
-    TimeoutError,         # Operation timeout
-    FileSizeError,        # File exceeds size limits
-    UnsupportedFormatError,  # Format not supported
-)
+from md_server.sdk import MDConverter
+
+converter = MDConverter()
+
+try:
+    result = await converter.convert_file("document.pdf")
+except FileNotFoundError:
+    print("File not found")
+except ValueError as e:
+    print(f"Invalid input: {e}")
+except OSError as e:
+    print(f"System error: {e}")
 ```
 
 ### Comprehensive Error Handling
@@ -215,28 +225,20 @@ async def robust_convert(file_path: str):
         result = await converter.convert_file(file_path)
         return result.markdown
         
-    except FileSizeError:
-        print(f"File {file_path} is too large")
+    except FileNotFoundError:
+        print(f"File {file_path} not found")
         return None
         
-    except UnsupportedFormatError:
-        print(f"Format not supported for {file_path}")
+    except ValueError as e:
+        print(f"Invalid input for {file_path}: {e}")
         return None
         
-    except InvalidInputError as e:
-        print(f"Invalid input: {e}")
+    except OSError as e:
+        print(f"File system error for {file_path}: {e}")
         return None
         
-    except TimeoutError:
-        print(f"Conversion timeout for {file_path}")
-        return None
-        
-    except NetworkError as e:
-        print(f"Network error: {e}")
-        return None
-        
-    except ConversionError as e:
-        print(f"Conversion failed: {e}")
+    except Exception as e:
+        print(f"Conversion failed for {file_path}: {e}")
         return None
 ```
 
@@ -249,8 +251,8 @@ async def robust_convert(file_path: str):
 converter = MDConverter()
 
 # For remote converters, use context manager
-async with MDConverter.remote("https://api.example.com") as converter:
-    result = await converter.convert_file("document.pdf")
+async with RemoteMDConverter("https://api.example.com") as client:
+    result = await client.convert_file("document.pdf")
 ```
 
 ### 2. Configuration Management

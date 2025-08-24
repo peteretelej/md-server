@@ -65,6 +65,18 @@ class ConversionMetadata(BaseModel):
     warnings: List[str] = Field(default_factory=list, description="Conversion warnings")
 
 
+class ConversionResult(BaseModel):
+    """Result of a document conversion operation from core converter."""
+
+    success: bool = Field(description="Whether conversion was successful")
+    markdown: str = Field(description="Converted markdown content")
+    metadata: ConversionMetadata = Field(description="Conversion metadata")
+    request_id: str = Field(
+        default_factory=lambda: f"req_{uuid.uuid4()}",
+        description="Unique request identifier",
+    )
+
+
 class ConvertResponse(BaseModel):
     success: bool = Field(description="Whether conversion was successful")
     markdown: str = Field(description="Converted markdown content")

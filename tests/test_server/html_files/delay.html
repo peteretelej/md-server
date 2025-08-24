@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delayed Response Page</title>
+</head>
+<body>
+    <h1>Delayed Response Page</h1>
+    <p>This page simulates a slow-loading resource.</p>
+    
+    <div id="slow-content">Loading slow content...</div>
+    
+    <script>
+        setTimeout(function() {
+            document.getElementById('slow-content').innerHTML = 
+                '<h2>Slow Content Loaded</h2><p>This content took a while to load.</p>';
+        }, 2000);
+    </script>
+</body>
+</html>

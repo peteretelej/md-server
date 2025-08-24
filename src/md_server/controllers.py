@@ -12,23 +12,10 @@ from .models import (
     ConvertResponse,
     ErrorResponse,
 )
-from .sdk import MDConverter
-from .sdk.exceptions import (
-    ConversionError,
-    InvalidInputError,
-    NetworkError,
-    TimeoutError,
-    FileSizeError,
-    UnsupportedFormatError,
-)
+from .core.converter import DocumentConverter
+from .core.validation import ValidationError
 from .core.config import Settings
-from .core.error_mapper import (
-    map_conversion_error,
-    map_value_error,
-    map_generic_error,
-    calculate_source_size,
-)
-from .detection import ContentTypeDetector
+from .core.detection import ContentTypeDetector
 
 
 class ConvertController(Controller):
@@ -38,7 +25,7 @@ class ConvertController(Controller):
     async def convert_unified(
         self,
         request: Request,
-        md_converter: MDConverter,
+        document_converter: DocumentConverter,
         settings: Settings,
     ) -> Response[Union[ConvertResponse, ErrorResponse]]:
         """Unified conversion endpoint that handles all input types"""
@@ -48,9 +35,9 @@ class ConvertController(Controller):
             # Parse request to determine input type and data
             input_data = await self._parse_request(request)
 
-            # Use SDK for conversion based on input type
+            # Use core converter for conversion based on input type
             if input_data.get("url"):
-                result = await md_converter.convert_url(
+                result = await document_converter.convert_url(
                     input_data["url"], js_rendering=input_data.get("js_rendering")
                 )
             elif input_data.get("content"):
@@ -59,39 +46,42 @@ class ConvertController(Controller):
                     try:
                         content = base64.b64decode(input_data["content"])
                     except Exception:
-                        raise InvalidInputError("Invalid base64 content")
+                        raise ValueError("Invalid base64 content")
                 else:
                     content = input_data["content"]
 
-                result = await md_converter.convert_content(
+                result = await document_converter.convert_content(
                     content, filename=input_data.get("filename")
                 )
             elif input_data.get("text"):
                 # Determine MIME type: if specified use it, otherwise use markdown for backward compatibility
                 mime_type = input_data.get("mime_type", "text/markdown")
-                result = await md_converter.convert_text(input_data["text"], mime_type)
-            else:
-                raise InvalidInputError(
-                    "No valid input provided (url, content, or text)"
+                result = await document_converter.convert_text(
+                    input_data["text"], mime_type
                 )
+            else:
+                raise ValueError("No valid input provided (url, content, or text)")
 
             # Convert SDK result to API response format
             response = self._create_success_response_from_sdk(result, start_time)
             return Response(response, status_code=HTTP_200_OK)
 
-        except (
-            InvalidInputError,
-            NetworkError,
-            TimeoutError,
-            FileSizeError,
-            UnsupportedFormatError,
-            ConversionError,
-        ) as e:
-            return self._handle_sdk_error(e)
+        except ValidationError as e:
+            return self._handle_validation_error(e)
         except ValueError as e:
-            self._handle_value_error(str(e))
+            error_response = ErrorResponse.create_error(
+                code="INVALID_INPUT",
+                message=str(e),
+                suggestions=["Check input format", "Verify JSON structure"],
+            )
+            raise HTTPException(status_code=400, detail=error_response.model_dump())
         except Exception as e:
-            self._handle_generic_error(str(e))
+            error_response = ErrorResponse.create_error(
+                code="CONVERSION_FAILED",
+                message=f"Conversion failed: {str(e)}",
+                suggestions=["Check input format", "Contact support if issue persists"],
+            )
+            raise HTTPException(status_code=500, detail=error_response.model_dump())
 
     async def _parse_request(self, request: Request) -> dict:
         """Parse request to extract conversion input data"""
@@ -167,43 +157,13 @@ class ConvertController(Controller):
             warnings=[],
         )
 
-    def _handle_sdk_error(self, error) -> Response[ErrorResponse]:
-        """Handle SDK exceptions and map to HTTP responses"""
-        code, message, status_code, suggestions = map_conversion_error(error)
+    def _handle_validation_error(
+        self, error: ValidationError
+    ) -> Response[ErrorResponse]:
+        """Handle validation exceptions"""
         error_response = ErrorResponse.create_error(
-            code=code,
-            message=message,
+            code="VALIDATION_ERROR",
+            message=str(error),
             details=getattr(error, "details", {}),
-            suggestions=suggestions,
         )
-        raise HTTPException(status_code=status_code, detail=error_response.model_dump())
-
-    def _handle_value_error(self, error_msg: str) -> None:
-        """Handle ValueError with specific error type detection"""
-        code, status_code, suggestions = map_value_error(error_msg)
-        error_response = ErrorResponse.create_error(
-            code=code, message=error_msg, suggestions=suggestions
-        )
-        raise HTTPException(status_code=status_code, detail=error_response.model_dump())
-
-    def _handle_generic_error(self, error_msg: str, format_type: str = None) -> None:
-        """Handle generic exceptions"""
-        code, status_code, details, suggestions = map_generic_error(
-            error_msg, format_type
-        )
-        error_response = ErrorResponse.create_error(
-            code=code,
-            message=f"Conversion failed: {error_msg}",
-            details=details,
-            suggestions=suggestions,
-        )
-        raise HTTPException(
-            status_code=status_code,
-            detail=error_response.model_dump(),
-        )
-
-    def _calculate_source_size(
-        self, input_type: str, content_data: dict, request_data: dict
-    ) -> int:
-        """Calculate source content size (backward compatibility method)"""
-        return calculate_source_size(input_type, content_data, request_data)
+        raise HTTPException(status_code=400, detail=error_response.model_dump())

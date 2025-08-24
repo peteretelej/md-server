@@ -8,11 +8,11 @@ from markitdown import MarkItDown
 from .core.config import get_settings, Settings
 from .controllers import ConvertController
 from .middleware.auth import create_auth_middleware
-from .browser import BrowserChecker
+from .core.browser import BrowserChecker
 from .models import HealthResponse, FormatsResponse, SystemCapabilities
-from .detection import ContentTypeDetector
-from .factories import MarkItDownFactory
-from .sdk import MDConverter
+from .core.detection import ContentTypeDetector
+from .core.factories import MarkItDownFactory
+from .core.converter import DocumentConverter
 
 # Track server start time for uptime calculation
 _server_start_time = time.time()
@@ -66,12 +66,12 @@ def provide_settings() -> Settings:
     return get_settings()
 
 
-def provide_md_converter(settings: Settings) -> MDConverter:
-    """Provide MDConverter SDK instance with settings configuration"""
+def provide_document_converter(settings: Settings) -> DocumentConverter:
+    """Provide DocumentConverter instance with settings configuration"""
     # Get browser availability from app state
-    browser_available = getattr(provide_md_converter, "_browser_available", False)
+    browser_available = getattr(provide_document_converter, "_browser_available", False)
 
-    return MDConverter(
+    return DocumentConverter(
         ocr_enabled=getattr(settings, "ocr_enabled", False),
         js_rendering=browser_available,
         timeout=settings.conversion_timeout,
@@ -79,7 +79,6 @@ def provide_md_converter(settings: Settings) -> MDConverter:
         extract_images=getattr(settings, "extract_images", False),
         preserve_formatting=getattr(settings, "preserve_formatting", True),
         clean_markdown=getattr(settings, "clean_markdown", False),
-        debug=settings.debug,
     )
 
 
@@ -89,11 +88,11 @@ async def startup_browser_detection():
 
     try:
         browser_available = await BrowserChecker.is_available()
-        provide_md_converter._browser_available = browser_available
+        provide_document_converter._browser_available = browser_available
         BrowserChecker.log_availability(browser_available)
     except Exception as e:
         logging.error(f"Startup browser detection failed: {e}")
-        provide_md_converter._browser_available = False
+        provide_document_converter._browser_available = False
 
 
 settings = get_settings()
@@ -108,7 +107,7 @@ app = Litestar(
     dependencies={
         "converter": Provide(provide_converter, sync_to_thread=False),
         "settings": Provide(provide_settings, sync_to_thread=False),
-        "md_converter": Provide(provide_md_converter, sync_to_thread=False),
+        "document_converter": Provide(provide_document_converter, sync_to_thread=False),
     },
     middleware=middleware,
     debug=settings.debug,

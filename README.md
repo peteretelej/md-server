@@ -172,7 +172,75 @@ pdftotext document.pdf - | curl -X POST localhost:8080/convert \
   --data-binary @-
 ```
 
-### Python Client Example
+### Python SDK
+
+Install the SDK:
+
+```bash
+pip install md-server[sdk]
+```
+
+#### Local Conversion
+
+```python
+from md_server.sdk import MDConverter
+import asyncio
+
+# Create converter
+converter = MDConverter(
+    js_rendering=True,
+    ocr_enabled=True,
+    extract_images=True
+)
+
+# Async usage
+async def convert_documents():
+    # Convert file
+    result = await converter.convert_file('document.pdf')
+    print(result.markdown)
+    
+    # Convert URL
+    result = await converter.convert_url('https://example.com')
+    print(result.markdown)
+    
+    # Convert content
+    with open('file.docx', 'rb') as f:
+        result = await converter.convert_content(f.read(), filename='file.docx')
+    print(result.markdown)
+
+asyncio.run(convert_documents())
+
+# Sync usage
+result = converter.convert_file_sync('document.pdf')
+print(result.markdown)
+```
+
+#### Remote API Client
+
+```python
+from md_server.sdk import RemoteMDConverter
+import asyncio
+
+# Create remote client
+async def use_remote_api():
+    async with RemoteMDConverter('http://localhost:8080') as client:
+        # Convert file
+        result = await client.convert_file('document.pdf')
+        print(result.markdown)
+        
+        # Convert URL
+        result = await client.convert_url('https://example.com')
+        print(result.markdown)
+
+asyncio.run(use_remote_api())
+
+# Or sync
+client = RemoteMDConverter('http://localhost:8080')
+result = client.convert_file_sync('document.pdf')
+print(result.markdown)
+```
+
+#### Raw HTTP Client
 
 ```python
 import requests

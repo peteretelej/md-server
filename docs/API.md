@@ -288,13 +288,13 @@ curl -X POST localhost:8080/convert --data-binary @doc.pdf \
 The SDK is included with md-server:
 
 ```bash
-pip install md-server
+pip install md-server[sdk]
 ```
 
 ## Local Usage
 
 ```python
-from md_server import MDConverter
+from md_server.sdk import MDConverter
 
 # Create converter
 converter = MDConverter()
@@ -318,32 +318,36 @@ result = await converter.convert_text("<h1>HTML</h1>", mime_type="text/html")
 ## Remote Usage
 
 ```python
-from md_server import MDConverter
+from md_server.sdk import RemoteMDConverter
 
 # Connect to remote md-server
-converter = MDConverter.remote(
+async with RemoteMDConverter(
     endpoint="https://api.example.com",
     api_key="your-api-key"
-)
-
-result = await converter.convert_file("document.pdf")
+) as client:
+    result = await client.convert_file("document.pdf")
+    print(result.markdown)
 ```
 
 ## Sync API
 
 ```python
-from md_server import MDConverter
+from md_server.sdk import MDConverter, RemoteMDConverter
 
+# Local converter
 converter = MDConverter()
-
-# Sync versions
 result = converter.convert_file_sync("document.pdf")
 result = converter.convert_url_sync("https://example.com")
+
+# Remote converter
+client = RemoteMDConverter("https://api.example.com")
+result = client.convert_file_sync("document.pdf")
 ```
 
 ## Configuration
 
 ```python
+# Local converter
 converter = MDConverter(
     ocr_enabled=True,
     js_rendering=True,
@@ -351,6 +355,13 @@ converter = MDConverter(
     max_file_size_mb=100,
     extract_images=True,
     preserve_formatting=True
+)
+
+# Remote converter
+client = RemoteMDConverter(
+    endpoint="https://api.example.com",
+    api_key="your-api-key",
+    timeout=30
 )
 ```
 
@@ -361,10 +372,10 @@ converter = MDConverter(
 ```python
 @dataclass
 class ConversionResult:
+    success: bool
     markdown: str
     metadata: ConversionMetadata
-    success: bool = True
-    request_id: str = None
+    request_id: str
 ```
 
 ### ConversionMetadata
@@ -375,30 +386,29 @@ class ConversionMetadata:
     source_type: str
     source_size: int
     markdown_size: int
-    processing_time: float
+    conversion_time_ms: int
     detected_format: str
-    warnings: List[str] = None
+    warnings: List[str]
 ```
 
-## Exceptions
+## Exception Handling
+
+The SDK uses standard Python exceptions:
 
 ```python
-from md_server import (
-    ConversionError,
-    InvalidInputError,
-    NetworkError,
-    TimeoutError,
-    FileSizeError,
-    UnsupportedFormatError
-)
+from md_server.sdk import MDConverter
+
+converter = MDConverter()
 
 try:
     result = await converter.convert_file("document.pdf")
-except FileSizeError:
-    print("File too large")
-except UnsupportedFormatError:
-    print("Format not supported")
-except ConversionError as e:
+except FileNotFoundError:
+    print("File not found")
+except ValueError as e:
+    print(f"Invalid input: {e}")
+except OSError as e:
+    print(f"File system error: {e}")
+except Exception as e:
     print(f"Conversion failed: {e}")
 ```
 

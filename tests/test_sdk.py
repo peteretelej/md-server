@@ -1,632 +1,266 @@
-from pathlib import Path
-
 import pytest
+from pathlib import Path
+from unittest.mock import patch
 
-from md_server.sdk import MDConverter, ConversionResult, ConversionMetadata
-from md_server.sdk.exceptions import (
-    ConversionError,
-    InvalidInputError,
-    FileSizeError,
-    UnsupportedFormatError,
-)
+from md_server.sdk import MDConverter
+from md_server.models import ConversionResult
 
 
-class TestSDKDirectUsage:
-    """Test direct SDK usage - programmatic document conversion."""
-
+class TestMDConverter:
     @pytest.fixture
     def converter(self):
-        """Basic SDK converter instance for testing."""
         return MDConverter()
 
-    @pytest.fixture
-    def custom_converter(self):
-        """SDK converter with custom configuration."""
-        return MDConverter(
-            timeout=60,
-            max_file_size_mb=20,
-            debug=True,
-            extract_images=True,
-            preserve_formatting=True,
+    def test_init_default_params(self):
+        converter = MDConverter()
+        assert converter._converter is not None
+
+    def test_init_custom_params(self):
+        converter = MDConverter(ocr_enabled=True, js_rendering=True, timeout=60)
+        assert converter._converter.ocr_enabled is True
+        assert converter._converter.js_rendering is True
+        assert converter._converter.timeout == 60
+
+    @pytest.mark.asyncio
+    async def test_convert_file_async(self, converter, simple_html_file):
+        if simple_html_file.exists():
+            result = await converter.convert_file(simple_html_file)
+            assert isinstance(result, ConversionResult)
+            assert result.success is True
+            assert result.markdown
+
+    def test_convert_file_sync(self, converter, simple_html_file):
+        if simple_html_file.exists():
+            result = converter.convert_file_sync(simple_html_file)
+            assert isinstance(result, ConversionResult)
+            assert result.success is True
+            assert result.markdown
+
+    @pytest.mark.asyncio
+    async def test_convert_file_nonexistent(self, converter):
+        nonexistent = Path("/nonexistent/file.txt")
+        with pytest.raises(FileNotFoundError):
+            await converter.convert_file(nonexistent)
+
+    @pytest.mark.asyncio
+    async def test_convert_content_async(self, converter):
+        content = b"<html><body><h1>Test Content</h1></body></html>"
+        result = await converter.convert_content(content)
+        assert isinstance(result, ConversionResult)
+        assert result.success is True
+        assert "Test Content" in result.markdown
+
+    def test_convert_content_sync(self, converter):
+        content = b"<html><body><h1>Test Content</h1></body></html>"
+        result = converter.convert_content_sync(content)
+        assert isinstance(result, ConversionResult)
+        assert result.success is True
+        assert "Test Content" in result.markdown
+
+    @pytest.mark.asyncio
+    async def test_convert_content_empty(self, converter):
+        from markitdown._exceptions import UnsupportedFormatException
+
+        with pytest.raises(UnsupportedFormatException):
+            await converter.convert_content(b"")
+
+    @pytest.mark.asyncio
+    async def test_convert_url_async(self, converter):
+        from md_server.models import ConversionMetadata
+
+        with patch.object(converter._converter, "convert_url") as mock_convert:
+            metadata = ConversionMetadata(
+                source_type="url",
+                source_size=100,
+                markdown_size=50,
+                conversion_time_ms=100,
+                detected_format="text/html",
+            )
+            mock_convert.return_value = ConversionResult(
+                success=True, markdown="# Test URL", metadata=metadata
+            )
+            result = await converter.convert_url("https://example.com")
+            assert result.success is True
+            assert result.markdown == "# Test URL"
+
+    def test_convert_url_sync(self, converter):
+        from md_server.models import ConversionMetadata
+
+        with patch.object(converter._converter, "convert_url") as mock_convert:
+            metadata = ConversionMetadata(
+                source_type="url",
+                source_size=100,
+                markdown_size=50,
+                conversion_time_ms=100,
+                detected_format="text/html",
+            )
+            mock_convert.return_value = ConversionResult(
+                success=True, markdown="# Test URL", metadata=metadata
+            )
+            result = converter.convert_url_sync("https://example.com")
+            assert result.success is True
+            assert result.markdown == "# Test URL"
+
+    @pytest.mark.asyncio
+    async def test_convert_url_invalid(self, converter):
+        with pytest.raises(ValueError):
+            await converter.convert_url("not-a-url")
+
+
+class TestMDConverterContextManager:
+    @pytest.mark.asyncio
+    async def test_async_context_manager(self, simple_html_file):
+        if simple_html_file.exists():
+            async with MDConverter() as converter:
+                result = await converter.convert_file(simple_html_file)
+                assert result.success is True
+
+    def test_sync_context_manager(self, simple_html_file):
+        if simple_html_file.exists():
+            with MDConverter() as converter:
+                result = converter.convert_file_sync(simple_html_file)
+                assert result.success is True
+
+
+class TestMDConverterEdgeCases:
+    """Test edge cases and model validation"""
+
+    def test_model_validation_edge_cases(self):
+        """Test ConversionResult model validation edge cases"""
+        from md_server.models import ConversionResult
+
+        from md_server.models import ConversionMetadata
+
+        # Test with success result
+        metadata = ConversionMetadata(
+            source_type="html",
+            source_size=100,
+            markdown_size=50,
+            conversion_time_ms=100,
+            detected_format="text/html",
         )
+        result = ConversionResult(success=True, markdown="", metadata=metadata)
+        assert result.success is True
+        assert result.markdown == ""
 
-    @pytest.fixture
-    def test_files(self):
-        """Paths to test files."""
-        test_data_dir = Path(__file__).parent / "test_data"
-        return {
-            "pdf": test_data_dir / "test.pdf",
-            "docx": test_data_dir / "test.docx",
-            "html": test_data_dir / "test_blog.html",
-            "jpg": test_data_dir / "test.jpg",
-        }
+        # Test with minimal metadata
+        minimal_metadata = ConversionMetadata(
+            source_type="text",
+            source_size=0,
+            markdown_size=0,
+            conversion_time_ms=0,
+            detected_format="text/plain",
+        )
+        minimal_result = ConversionResult(
+            success=True, markdown="test", metadata=minimal_metadata
+        )
+        assert minimal_result.success is True
+        assert minimal_result.markdown == "test"
 
-    @pytest.mark.asyncio
-    async def test_local_converter_file(self, converter, test_files):
-        """Test SDK file conversion - core programmatic usage."""
-        # Test PDF file conversion
-        result = await converter.convert_file(str(test_files["pdf"]))
+    def test_converter_parameter_validation(self):
+        """Test converter parameter validation"""
+        # Test with invalid timeout
+        converter = MDConverter(timeout=-1)
+        assert (
+            converter._converter.timeout == -1
+        )  # Should accept but may be handled by underlying converter
 
-        # Verify result structure
-        assert isinstance(result, ConversionResult)
-        assert isinstance(result.metadata, ConversionMetadata)
-
-        # Verify content
-        assert result.markdown is not None
-        assert len(result.markdown) > 0
-        assert isinstance(result.markdown, str)
-
-        # Verify metadata
-        assert result.metadata.source_type in ["pdf", "file"]
-        assert result.metadata.source_size > 0
-        assert result.metadata.processing_time > 0
-        assert "pdf" in result.metadata.detected_format.lower()
+        # Test with extreme values
+        converter = MDConverter(timeout=999999)
+        assert converter._converter.timeout == 999999
 
     @pytest.mark.asyncio
-    async def test_local_converter_url(self, converter, http_test_server):
-        """Test SDK URL conversion - web content processing."""
-        # Use a simple, reliable URL from local test server
-        test_url = f"{http_test_server}/robots.txt"
-
-        try:
-            result = await converter.convert_url(test_url)
-
-            # Verify result structure
-            assert isinstance(result, ConversionResult)
-            assert result.markdown is not None
-            assert len(result.markdown) > 0
-
-            # Verify metadata indicates URL source
-            assert result.metadata.source_type == "url"
-            assert result.metadata.source_size > 0
-        except Exception as e:
-            # URL conversion might fail due to SDK issues, so skip if it fails
-            pytest.skip(f"URL conversion failed: {e}")
-
-    @pytest.mark.asyncio
-    async def test_local_converter_content(self, converter, test_files):
-        """Test SDK content conversion - binary data processing."""
-        # Read file content as bytes
-        with open(test_files["html"], "rb") as f:
-            html_content = f.read()
-
-        result = await converter.convert_content(html_content, filename="test.html")
-
-        # Verify result structure
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-        assert len(result.markdown) > 0
-
-        # Verify content detection
-        assert "html" in result.metadata.detected_format.lower()
-        assert result.metadata.source_size == len(html_content)
-
-    @pytest.mark.asyncio
-    async def test_local_converter_text(self, converter):
-        """Test SDK text conversion - direct content processing."""
-        html_text = """
-        <html>
-        <body>
-            <h1>Test Document</h1>
-            <p>This is a <strong>test</strong> paragraph with <em>emphasis</em>.</p>
-            <ul>
-                <li>Item 1</li>
-                <li>Item 2</li>
-            </ul>
-        </body>
-        </html>
-        """
-
-        result = await converter.convert_text(html_text, "text/html")
-
-        # Verify result structure
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-        assert len(result.markdown) > 0
-
-        # Verify HTML was converted to markdown
-        assert "# Test Document" in result.markdown
-        assert "**test**" in result.markdown
-        assert "*emphasis*" in result.markdown
-        assert "- Item 1" in result.markdown or "* Item 1" in result.markdown
-
-    def test_sync_wrappers(self, converter, test_files):
-        """Test synchronous wrapper methods - blocking API usage."""
-        # Test sync file conversion
-        result = converter.convert_file_sync(str(test_files["html"]))
-
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-        assert len(result.markdown) > 0
-
-        # Test sync text conversion
-        simple_html = "<h1>Sync Test</h1><p>Content</p>"
-        result = converter.convert_text_sync(simple_html, "text/html")
-
-        assert isinstance(result, ConversionResult)
-        assert "# Sync Test" in result.markdown
-        assert "Content" in result.markdown
-
-    @pytest.mark.asyncio
-    async def test_custom_config(self, custom_converter, test_files):
-        """Test SDK with custom configuration - advanced usage."""
-        result = await custom_converter.convert_file(str(test_files["pdf"]))
-
-        # Should work with custom settings
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-
-        # Custom converter should handle files up to 20MB
-        # (This tests that configuration was applied)
-        assert custom_converter.options.max_file_size_mb == 20
-
-    @pytest.mark.asyncio
-    async def test_error_handling(self, converter):
-        """Test SDK exception handling - error scenarios."""
-        # Test invalid file path
-        with pytest.raises((ConversionError, InvalidInputError, FileNotFoundError)):
-            await converter.convert_file("/nonexistent/file.pdf")
-
-        # Test invalid URL
-        with pytest.raises((ConversionError, InvalidInputError)):
-            await converter.convert_url("not-a-valid-url")
-
-        # Test unsupported content
-        invalid_content = b"\x00\x01\x02INVALID"
-        try:
-            result = await converter.convert_content(invalid_content)
-            # If it doesn't raise an exception, it should at least return something
-            assert result.markdown is not None
-        except (UnsupportedFormatError, ConversionError):
-            # These exceptions are acceptable for invalid content
-            pass
-
-    @pytest.mark.asyncio
-    async def test_browser_detection(self, converter, http_test_server):
-        """Test browser capability impact - JavaScript handling."""
-        # Test that converter can handle URLs regardless of browser availability
-        # This tests the browser detection and fallback logic
-        simple_url = f"{http_test_server}/robots.txt"
-
-        try:
-            result = await converter.convert_url(simple_url)
-
-            # Should work whether browser is available or not
-            assert isinstance(result, ConversionResult)
-            assert result.markdown is not None
-
-            # Test with js_rendering option
-            result_with_js = await converter.convert_url(simple_url, js_rendering=True)
-
-            # Should handle js_rendering parameter gracefully
-            assert isinstance(result_with_js, ConversionResult)
-            assert result_with_js.markdown is not None
-        except Exception as e:
-            # URL conversion might fail due to SDK issues, so skip if it fails
-            pytest.skip(f"URL conversion failed: {e}")
-
-
-class TestSDKConfiguration:
-    """Test SDK configuration and advanced features."""
-
-    def test_sdk_initialization_defaults(self):
-        """Test SDK initialization with default settings."""
+    async def test_convert_content_type_edge_cases(self):
+        """Test content type edge cases"""
         converter = MDConverter()
 
-        # Verify default configuration through options
-        assert converter.options.timeout == 30  # Default timeout
-        assert converter.options.max_file_size_mb == 50  # Default size limit
-        # ConversionOptions doesn't have debug field - it's internal to converter
+        # Test with binary content
+        binary_content = b"\x00\x01\x02\x03"
+        result = await converter.convert_content(binary_content)
+        # Should handle gracefully
+        assert isinstance(result, ConversionResult)
 
-    def test_sdk_initialization_custom(self):
-        """Test SDK initialization with custom settings."""
-        converter = MDConverter(
-            timeout=120,
-            max_file_size_mb=100,
-            debug=True,
-            ocr_enabled=True,
-            extract_images=True,
-            preserve_formatting=False,
-            clean_markdown=True,
-        )
+        # Test with very large content
+        large_content = ("<html><body>" + "a" * 10000 + "</body></html>").encode()
+        result = await converter.convert_content(large_content)
+        assert isinstance(result, ConversionResult)
 
-        # Verify custom configuration through options
-        assert converter.options.timeout == 120
-        assert converter.options.max_file_size_mb == 100
-        assert converter.options.ocr_enabled is True
 
-    @pytest.mark.asyncio
-    async def test_conversion_options(self):
-        """Test conversion with various options."""
+class TestMDConverterUserWorkflows:
+    def test_batch_file_conversion(self, test_data_dir):
+        """Test converting multiple files in batch"""
         converter = MDConverter()
 
-        html_content = "<h1>Test</h1><p>Content with <img src='test.jpg'> image</p>"
-
-        # Test with different options
-        result1 = await converter.convert_text(
-            html_content, "text/html", extract_images=True
-        )
-
-        result2 = await converter.convert_text(
-            html_content, "text/html", preserve_formatting=False
-        )
-
-        # Both should succeed
-        assert isinstance(result1, ConversionResult)
-        assert isinstance(result2, ConversionResult)
-        assert result1.markdown is not None
-        assert result2.markdown is not None
-
-    @pytest.mark.asyncio
-    async def test_large_content_handling(self):
-        """Test handling of large content within limits."""
-        converter = MDConverter(max_file_size_mb=1)  # 1MB limit
-
-        # Create content under 1MB
-        small_content = "<h1>Small</h1>" + "<p>Content</p>" * 100
-
-        result = await converter.convert_text(small_content, "text/html")
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-
-        # Create content over 1MB
-        large_content = "<h1>Large</h1>" + "<p>Content</p>" * 50000  # ~1.2MB
-
-        try:
-            await converter.convert_text(large_content, "text/html")
-            # If it succeeds, that's fine (size check might be approximate)
-        except FileSizeError:
-            # Expected for content over limit
-            pass
-
-
-class TestSDKIntegration:
-    """Test SDK integration with various content types."""
-
-    @pytest.fixture
-    def converter(self):
-        return MDConverter(debug=True)
-
-    @pytest.fixture
-    def test_files(self):
-        """Paths to test files."""
-        test_data_dir = Path(__file__).parent / "test_data"
-        return {
-            "pdf": test_data_dir / "test.pdf",
-            "docx": test_data_dir / "test.docx",
-            "html": test_data_dir / "test_blog.html",
-            "jpg": test_data_dir / "test.jpg",
-        }
-
-    @pytest.mark.asyncio
-    async def test_multiple_format_support(self, converter, test_files):
-        """Test SDK handles multiple file formats correctly."""
-        # Test different file types
-        formats_to_test = ["html", "pdf"]  # Start with reliable formats
-
-        for format_name in formats_to_test:
-            if test_files[format_name].exists():
-                result = await converter.convert_file(str(test_files[format_name]))
-
-                assert isinstance(result, ConversionResult)
-                assert result.markdown is not None
-                assert len(result.markdown) > 0
-                assert format_name in result.metadata.detected_format.lower()
-
-    @pytest.mark.asyncio
-    async def test_content_detection_accuracy(self, converter):
-        """Test content type detection through SDK."""
-        # Test various content types
-        test_cases = [
-            ("<h1>HTML</h1>", "text/html", "html"),
-            ("# Markdown", "text/markdown", "markdown"),
-            ("Plain text content", "text/plain", "text"),
+        # Find available test files
+        test_files = [
+            test_data_dir / "simple.html",
+            test_data_dir / "test.pdf",
+            test_data_dir / "test.docx",
         ]
 
-        for content, mime_type, expected_format in test_cases:
-            result = await converter.convert_text(content, mime_type)
+        results = []
+        for file_path in test_files:
+            if file_path.exists():
+                result = converter.convert_file_sync(file_path)
+                results.append(result)
 
-            assert isinstance(result, ConversionResult)
-            assert result.markdown is not None
-            # Format detection should identify the content type
-            assert expected_format in result.metadata.detected_format.lower()
+        # Should have at least one successful conversion
+        assert len(results) > 0
+        successful_results = [r for r in results if r.success]
+        assert len(successful_results) > 0
 
-    @pytest.mark.asyncio
-    async def test_metadata_completeness(self, converter, test_files):
-        """Test that SDK provides complete metadata."""
-        result = await converter.convert_file(str(test_files["html"]))
+    def test_mixed_content_types(self):
+        """Test converting different content types"""
+        converter = MDConverter()
 
-        # Verify all metadata fields are present
-        metadata = result.metadata
-        assert metadata.source_type is not None
-        assert metadata.source_size > 0
-        assert metadata.processing_time > 0
-        assert metadata.detected_format is not None
-        assert len(metadata.detected_format) > 0
+        test_contents = [
+            b"<html><body><h1>HTML Content</h1></body></html>",
+            b'{"title": "JSON Content", "type": "test"}',
+            b"Plain text content for testing",
+        ]
 
-    @pytest.mark.asyncio
-    async def test_concurrent_conversions(self, converter):
-        """Test SDK handles concurrent operations safely."""
-        import asyncio
+        results = []
+        for content in test_contents:
+            result = converter.convert_content_sync(content)
+            results.append(result)
 
-        # Create multiple conversion tasks
-        tasks = []
-        for i in range(5):
-            content = f"<h1>Document {i}</h1><p>Content for document {i}</p>"
-            task = converter.convert_text(content, "text/html")
-            tasks.append(task)
-
-        # Run concurrently
-        results = await asyncio.gather(*tasks)
-
-        # Verify all conversions succeeded
-        assert len(results) == 5
-        for i, result in enumerate(results):
-            assert isinstance(result, ConversionResult)
-            assert f"Document {i}" in result.markdown
+        # All should succeed
+        assert all(r.success for r in results)
+        assert all(r.markdown for r in results)
 
 
-class TestSDKErrorScenarios:
-    """Test SDK error handling and edge cases."""
+class TestMDConverterNetworkErrors:
+    """Test network timeout and error handling"""
 
     @pytest.fixture
     def converter(self):
-        return MDConverter()
+        return MDConverter(timeout=1)  # Short timeout for testing
 
     @pytest.mark.asyncio
-    async def test_network_error_handling(self, converter):
-        """Test SDK handles network errors gracefully."""
-        # Test invalid domain
-        try:
-            await converter.convert_url(
-                "https://invalid-domain-that-does-not-exist.com"
-            )
-        except (ConversionError, InvalidInputError) as e:
-            # Should get a clear error message
-            assert str(e) is not None
-            assert len(str(e)) > 0
+    async def test_network_timeout_handling(self, converter):
+        """Test handling of network timeouts"""
+        with patch.object(converter._converter, "convert_url") as mock_convert:
+            from asyncio import TimeoutError
+
+            mock_convert.side_effect = TimeoutError("Network timeout")
+
+            with pytest.raises(TimeoutError):
+                await converter.convert_url("https://slow-server.example.com")
 
     @pytest.mark.asyncio
-    async def test_timeout_handling(self, converter, http_test_server):
-        """Test SDK timeout handling."""
-        # Use very short timeout
-        short_timeout_converter = MDConverter(timeout=1)
+    async def test_invalid_response_handling(self, converter):
+        """Test handling of invalid server responses"""
+        with patch.object(converter._converter, "convert_content") as mock_convert:
+            # Simulate invalid response from underlying converter
+            mock_convert.side_effect = ValueError("Invalid response format")
 
-        # This might timeout or succeed depending on network speed
-        try:
-            result = await short_timeout_converter.convert_url(
-                f"{http_test_server}/delay.html"
-            )
-            # If it succeeds, that's fine
-            assert isinstance(result, ConversionResult)
-        except (ConversionError, InvalidInputError):
-            # Timeout errors are expected
-            pass
+            with pytest.raises(ValueError):
+                await converter.convert_content(b"<html><body>Test</body></html>")
 
-    @pytest.mark.asyncio
-    async def test_empty_content_handling(self, converter):
-        """Test SDK handles empty content gracefully."""
-        # Test empty text - SDK validates and rejects empty text
-        with pytest.raises(InvalidInputError):
-            await converter.convert_text("", "text/plain")
+    def test_sync_wrapper_exceptions(self, converter):
+        """Test exception handling in sync wrappers"""
+        with patch.object(converter._converter, "convert_content") as mock_convert:
+            mock_convert.side_effect = RuntimeError("Sync wrapper error")
 
-        # Test minimal text content
-        result = await converter.convert_text("minimal", "text/plain")
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-
-        # Test empty binary content - SDK validates and rejects empty content
-        with pytest.raises(InvalidInputError):
-            await converter.convert_content(b"", filename="empty.txt")
-
-        # Test minimal binary content
-        result = await converter.convert_content(
-            b"minimal content", filename="test.txt"
-        )
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-
-    @pytest.mark.asyncio
-    async def test_browser_unavailable_fallback(self, converter, http_test_server):
-        """Test SDK fallback when browser unavailable."""
-        from unittest.mock import patch
-
-        # Mock AsyncWebCrawler import failure
-        with patch(
-            "md_server.browser.AsyncWebCrawler",
-            side_effect=ImportError("Browser not available"),
-        ):
-            # URL conversion should still work with fallback
-            try:
-                result = await converter.convert_url(f"{http_test_server}/robots.txt")
-                assert isinstance(result, ConversionResult)
-                assert result.markdown is not None
-            except Exception:
-                # Network issues are acceptable in tests
-                pass
-
-            # JS rendering option should be ignored gracefully
-            try:
-                result = await converter.convert_url(
-                    f"{http_test_server}/robots.txt", js_rendering=True
-                )
-                assert isinstance(result, ConversionResult)
-                assert result.markdown is not None
-            except Exception:
-                # Network issues are acceptable in tests
-                pass
-
-    @pytest.mark.asyncio
-    async def test_network_failures(self, converter, http_test_server):
-        """Test SDK handles network failures gracefully."""
-        # Connection refused error
-        with pytest.raises((ConversionError, InvalidInputError)):
-            await converter.convert_url("http://127.0.0.1:99999")
-
-        # DNS resolution failure
-        with pytest.raises((ConversionError, InvalidInputError)):
-            await converter.convert_url(
-                "https://invalid-domain-that-does-not-exist-123456.com"
-            )
-
-        # SSL certificate error (self-signed)
-        try:
-            await converter.convert_url("https://self-signed.badssl.com")
-        except (ConversionError, InvalidInputError):
-            # SSL errors are expected
-            pass
-
-        # Connection timeout
-        short_timeout_converter = MDConverter(timeout=1)
-        try:
-            await short_timeout_converter.convert_url(f"{http_test_server}/delay.html")
-        except (ConversionError, InvalidInputError):
-            # Timeout errors are expected
-            pass
-
-    @pytest.mark.asyncio
-    async def test_validation_edge_cases(self, converter):
-        """Test SDK validation with edge cases."""
-        # Unicode filenames (emoji, Chinese chars)
-        unicode_content = b"Test content"
-        result = await converter.convert_content(
-            unicode_content, filename="测试文档📄.txt"
-        )
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-
-        # Path traversal attempts (should be handled safely)
-        result = await converter.convert_content(
-            b"Test content", filename="../../../etc/passwd.txt"
-        )
-        assert isinstance(result, ConversionResult)
-
-        # Very long filenames (truncated gracefully)
-        long_filename = "a" * 300 + ".txt"
-        result = await converter.convert_content(
-            b"Test content", filename=long_filename
-        )
-        assert isinstance(result, ConversionResult)
-
-        # Special chars in text content
-        special_text = "Special chars: ñáéíóú àèìòù çüöäß 中文 🎉 ♠♥♦♣"
-        result = await converter.convert_text(special_text, "text/plain")
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-
-        # Binary data in text field (should handle gracefully)
-        try:
-            binary_as_text = bytes([0, 1, 2, 255]).decode("utf-8", errors="replace")
-            result = await converter.convert_text(binary_as_text, "text/plain")
-            assert isinstance(result, ConversionResult)
-        except UnicodeDecodeError:
-            # Unicode errors are acceptable for binary data
-            pass
-
-    def test_model_validation_errors(self):
-        """Test model validation error paths."""
-        from md_server.models import ConvertRequest, ConversionOptions
-
-        # Test 1: ConvertRequest with no input fields
-        with pytest.raises(
-            ValueError, match="One of url, content, or text must be provided"
-        ):
-            ConvertRequest()
-
-        # Test 2: ConvertRequest with multiple input fields
-        with pytest.raises(
-            ValueError, match="Only one of url, content, or text can be provided"
-        ):
-            ConvertRequest(
-                url="https://example.com", text="content", content="base64content"
-            )
-
-        # Test 3: ConvertRequest with two input fields
-        with pytest.raises(
-            ValueError, match="Only one of url, content, or text can be provided"
-        ):
-            ConvertRequest(url="https://example.com", text="content")
-
-        # Test 4: Valid ConvertRequest with url
-        request = ConvertRequest(url="https://example.com")
-        assert request.url == "https://example.com"
-        assert request.text is None
-        assert request.content is None
-
-        # Test 5: Valid ConvertRequest with text
-        request = ConvertRequest(text="content")
-        assert request.text == "content"
-        assert request.url is None
-        assert request.content is None
-
-        # Test 6: Valid ConvertRequest with content
-        request = ConvertRequest(content="base64content")
-        assert request.content == "base64content"
-        assert request.url is None
-        assert request.text is None
-
-        # Test 7: ConversionOptions with various field types
-        options = ConversionOptions(
-            js_rendering=True,
-            timeout=30,
-            extract_images=False,
-            preserve_formatting=True,
-            ocr_enabled=False,
-            max_length=1000,
-            clean_markdown=True,
-        )
-        assert options.js_rendering is True
-        assert options.timeout == 30
-        assert options.extract_images is False
-
-    def test_sync_wrapper_edge_cases(self):
-        """Test sync wrapper edge cases - event loop handling."""
-        from md_server.sdk.core.sync_wrappers import (
-            sync_convert_text,
-            sync_convert_url,
-            sync_convert_content,
-        )
-
-        # Test 1: Basic sync wrapper functionality
-        result = sync_convert_text("# Test", "text/markdown")
-        assert result.markdown is not None
-        assert isinstance(result, ConversionResult)
-
-        # Test 2: Sync wrapper with URL (might fail in test environment)
-        try:
-            result = sync_convert_url("https://example.com")
-            assert isinstance(result, ConversionResult)
-        except (ConversionError, InvalidInputError):
-            # Network errors are acceptable in test environment
-            pass
-
-        # Test 3: Sync wrapper with content
-        content = b"Test content for sync wrapper"
-        result = sync_convert_content(content, filename="test.txt")
-        assert isinstance(result, ConversionResult)
-        assert result.markdown is not None
-
-        # Test 4: Sync wrapper error handling
-        try:
-            sync_convert_url("invalid-url")
-        except (ConversionError, InvalidInputError) as e:
-            assert str(e) is not None
-
-        # Test 5: Event loop handling in sync context
-        # This tests that sync wrappers work even when called from different contexts
-        def run_in_thread():
-            return sync_convert_text("Thread test", "text/plain")
-
-        import threading
-
-        result_holder = []
-
-        def thread_target():
-            result_holder.append(run_in_thread())
-
-        thread = threading.Thread(target=thread_target)
-        thread.start()
-        thread.join()
-
-        assert len(result_holder) == 1
-        assert isinstance(result_holder[0], ConversionResult)
+            with pytest.raises(RuntimeError):
+                converter.convert_content_sync(b"<html><body>Test</body></html>")

@@ -17,19 +17,37 @@ HTTP server for converting documents to markdown. Uses Litestar framework with M
   - `GET /formats` - Supported formats
 - `src/md_server/models.py` - Pydantic models
 
-### Business Logic
-- `src/md_server/converter.py` - Conversion orchestration
+### Core Business Logic
+- `src/md_server/core/converter.py` - Document conversion orchestration
   - MarkItDown integration
   - Crawl4AI integration (when available)
-  - Input type detection
+  - Input type detection and routing
+- `src/md_server/core/detection.py` - Content type detection
+- `src/md_server/core/browser.py` - Browser capability management
+- `src/md_server/core/security.py` - Security validations
+- `src/md_server/core/factories.py` - Service factories
+- `src/md_server/core/validation.py` - Input validation
+
+### SDK Layer (Simplified)
+- `src/md_server/sdk/converter.py` - Local SDK interface (~100 lines)
+- `src/md_server/sdk/remote.py` - Remote API client (~50 lines)
+- `src/md_server/sdk/models.py` - SDK data models (~30 lines)
+- `src/md_server/sdk/__init__.py` - Clean public API (~10 lines)
 
 ### Configuration
 - `src/md_server/core/config.py` - Settings management
 
 ## Data Flow
 
+### HTTP API Flow
 ```
-Request → Controller → Input Detection → Converter → Response
+Request → Controller → Core.DocumentConverter → Response
+```
+
+### SDK Flow
+```
+User Code → SDK.MDConverter → Core.DocumentConverter → ConversionResult
+User Code → SDK.RemoteMDConverter → HTTP API → ConversionResult
 ```
 
 ### Input Detection
@@ -38,7 +56,7 @@ Request → Controller → Input Detection → Converter → Response
 2. For multipart: extract file
 3. For JSON: check fields (url, content, text)
 4. For binary: use magic bytes
-5. Apply options and convert
+5. Route to appropriate core converter method
 
 ## Request/Response
 
@@ -101,12 +119,23 @@ Request → Controller → Input Detection → Converter → Response
 src/md_server/
 ├── __init__.py
 ├── __main__.py
-├── app.py
-├── controllers.py
-├── converter.py
-├── models.py
-└── core/
-    └── config.py
+├── app.py                    # Litestar app setup
+├── controllers.py            # HTTP request handlers
+├── models.py                 # API request/response models
+├── core/                     # Business logic (moved from root)
+│   ├── __init__.py
+│   ├── config.py            # Settings management
+│   ├── converter.py         # Core conversion logic
+│   ├── detection.py         # Content type detection  
+│   ├── browser.py           # Browser capabilities
+│   ├── security.py          # Security validation
+│   ├── factories.py         # Service factories
+│   └── validation.py        # Input validation
+└── sdk/                      # Simplified Python SDK
+    ├── __init__.py          # Clean public exports (~10 lines)
+    ├── converter.py         # Local converter wrapper (~100 lines)
+    ├── remote.py            # HTTP client (~50 lines)
+    └── models.py            # SDK data models (~30 lines)
 ```
 
 ## Configuration
