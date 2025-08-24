@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from md_server import MDConverter, ConversionError, RemoteMDConverter
+from md_server.sdk import RemoteMDConverter
 
 
 async def basic_remote_usage():
@@ -20,7 +20,7 @@ async def basic_remote_usage():
 
     # Connect to remote md-server
     # Note: Replace with your actual endpoint
-    remote_converter = MDConverter.remote(
+    remote_converter = RemoteMDConverter(
         endpoint="http://localhost:8080",  # Local server for demo
         api_key=os.getenv("MD_SERVER_API_KEY"),  # Optional API key
         timeout=30,
@@ -35,10 +35,10 @@ async def basic_remote_usage():
 
         print("✓ Remote conversion successful")
         print(f"✓ Generated {result.metadata.markdown_size} chars of markdown")
-        print(f"✓ Processing time: {result.metadata.processing_time:.2f}s")
+        print(f"✓ Processing time: {result.metadata.conversion_time_ms / 1000:.2f}s")
         print(f"✓ Result: {result.markdown}")
 
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Remote conversion failed: {e}")
     except Exception as e:
         print(f"❌ Connection error: {e}")
@@ -56,7 +56,7 @@ async def authenticated_remote_usage():
         print("   Using unauthenticated access...")
 
     # Create authenticated client
-    auth_converter = MDConverter.remote(
+    auth_converter = RemoteMDConverter(
         endpoint="http://localhost:8080", api_key=api_key, timeout=60
     )
 
@@ -85,7 +85,7 @@ async def authenticated_remote_usage():
         print(f"✓ Request ID: {result.request_id}")
         print(f"✓ Detected format: {result.metadata.detected_format}")
 
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Authenticated conversion failed: {e}")
 
 
@@ -93,7 +93,7 @@ async def remote_file_processing():
     """Process local files using remote converter."""
     print("\n=== Remote File Processing ===")
 
-    remote = MDConverter.remote("http://localhost:8080")
+    remote = RemoteMDConverter("http://localhost:8080")
 
     # Simulate processing local files through remote server
     local_files = ["document1.html", "presentation.md", "data.csv"]
@@ -120,7 +120,7 @@ async def remote_file_processing():
             print(f"  - Markdown size: {result.metadata.markdown_size} chars")
             print(f"  - Remote processing time: {result.metadata.processing_time:.2f}s")
 
-        except ConversionError as e:
+        except Exception as e:
             print(f"❌ Failed to process {filename}: {e}")
 
 
@@ -128,7 +128,7 @@ async def remote_url_processing():
     """Process URLs using remote converter."""
     print("\n=== Remote URL Processing ===")
 
-    remote = MDConverter.remote("http://localhost:8080")
+    remote = RemoteMDConverter("http://localhost:8080")
 
     urls = [
         "https://httpbin.org/html",
@@ -150,7 +150,7 @@ async def remote_url_processing():
             Path(filename).write_text(result.markdown)
             print(f"  - Saved to: {filename}")
 
-        except ConversionError as e:
+        except Exception as e:
             print(f"❌ Failed to process {url}: {e}")
 
 
@@ -163,7 +163,7 @@ async def distributed_processing():
 
         def __init__(self, endpoints: List[str], api_key: Optional[str] = None):
             self.converters = [
-                MDConverter.remote(endpoint, api_key=api_key, timeout=30)
+                RemoteMDConverter(endpoint, api_key=api_key, timeout=30)
                 for endpoint in endpoints
             ]
             self.current_server = 0
@@ -190,7 +190,7 @@ async def distributed_processing():
                     last_error = e
                     continue
 
-            raise ConversionError(f"All servers failed. Last error: {last_error}")
+            raise Exception(f"All servers failed. Last error: {last_error}")
 
         async def distributed_batch_convert(self, files: List[tuple]):
             """Process files across multiple servers concurrently."""
@@ -243,7 +243,7 @@ async def distributed_processing():
             "failover_test.html",
         )
         print(f"✓ Failover successful: {len(result.markdown)} chars")
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ All servers failed: {e}")
 
 
@@ -252,7 +252,7 @@ async def remote_context_manager():
     print("\n=== Remote Context Manager ===")
 
     # Using async context manager for proper cleanup
-    async with MDConverter.remote("http://localhost:8080") as converter:
+    async with RemoteMDConverter("http://localhost:8080") as converter:
         try:
             # Multiple operations in the same session
             html_result = await converter.convert_text(
@@ -265,7 +265,7 @@ async def remote_context_manager():
             print(f"✓ URL conversion: {len(url_result.markdown)} chars")
             print("✓ Context manager cleanup handled automatically")
 
-        except ConversionError as e:
+        except Exception as e:
             print(f"❌ Conversion failed: {e}")
 
     print("✓ Context manager exited, resources cleaned up")
@@ -275,7 +275,7 @@ async def sync_remote_api():
     """Demonstrate synchronous remote API usage."""
     print("\n=== Synchronous Remote API ===")
 
-    remote = MDConverter.remote("http://localhost:8080")
+    remote = RemoteMDConverter("http://localhost:8080")
 
     # Use sync methods for non-async environments
     try:
@@ -285,7 +285,7 @@ async def sync_remote_api():
         print("✓ Sync remote conversion successful")
         print(f"✓ Result: {result.markdown}")
 
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Sync remote conversion failed: {e}")
 
 

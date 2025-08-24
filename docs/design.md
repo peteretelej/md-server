@@ -28,11 +28,11 @@ HTTP server for converting documents to markdown. Uses Litestar framework with M
 - `src/md_server/core/factories.py` - Service factories
 - `src/md_server/core/validation.py` - Input validation
 
-### SDK Layer (Simplified)
-- `src/md_server/sdk/converter.py` - Local SDK interface (~100 lines)
-- `src/md_server/sdk/remote.py` - Remote API client (~50 lines)
-- `src/md_server/sdk/models.py` - SDK data models (~30 lines)
-- `src/md_server/sdk/__init__.py` - Clean public API (~10 lines)
+### SDK Layer
+- `src/md_server/sdk/converter.py` - Local SDK interface (91 lines)
+- `src/md_server/sdk/remote.py` - Remote API client (146 lines)
+- `src/md_server/sdk/models.py` - SDK data models (reuses core models)
+- `src/md_server/sdk/__init__.py` - Clean public API (14 lines)
 
 ### Configuration
 - `src/md_server/core/config.py` - Settings management
@@ -45,9 +45,15 @@ Request → Controller → Core.DocumentConverter → Response
 ```
 
 ### SDK Flow
+
+#### Local SDK
 ```
-User Code → SDK.MDConverter → Core.DocumentConverter → ConversionResult
-User Code → SDK.RemoteMDConverter → HTTP API → ConversionResult
+User Code → MDConverter → DocumentConverter → ConversionResult
+```
+
+#### Remote SDK  
+```
+User Code → RemoteMDConverter → HTTP Client → API → ConversionResult
 ```
 
 ### Input Detection
@@ -131,11 +137,11 @@ src/md_server/
 │   ├── security.py          # Security validation
 │   ├── factories.py         # Service factories
 │   └── validation.py        # Input validation
-└── sdk/                      # Simplified Python SDK
-    ├── __init__.py          # Clean public exports (~10 lines)
-    ├── converter.py         # Local converter wrapper (~100 lines)
-    ├── remote.py            # HTTP client (~50 lines)
-    └── models.py            # SDK data models (~30 lines)
+└── sdk/                      # Python SDK
+    ├── __init__.py          # Clean public exports (14 lines)
+    ├── converter.py         # Local converter wrapper (91 lines)  
+    ├── remote.py            # HTTP client (146 lines)
+    └── models.py            # SDK data models (reuses core models)
 ```
 
 ## Configuration

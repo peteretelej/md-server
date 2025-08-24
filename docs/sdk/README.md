@@ -1,6 +1,6 @@
 # MD Server Python SDK
 
-Simplified Python SDK for document to markdown conversion using md-server.
+Python SDK for document to markdown conversion using md-server.
 
 ## Installation
 
@@ -184,7 +184,7 @@ async def smart_convert(input_data: bytes, filename: str = None):
 For non-async environments:
 
 ```python
-from md_server import MDConverter
+from md_server.sdk import MDConverter
 
 converter = MDConverter()
 
@@ -344,7 +344,7 @@ async def monitored_convert(file_path: str):
 ```python
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from md_server import MDConverter
+from md_server.sdk import MDConverter
 import json
 
 @csrf_exempt
@@ -370,7 +370,7 @@ async def convert_document(request):
             'markdown': result.markdown,
             'metadata': {
                 'source_type': result.metadata.source_type,
-                'processing_time': result.metadata.processing_time
+                'conversion_time_ms': result.metadata.conversion_time_ms
             }
         })
         
@@ -382,7 +382,7 @@ async def convert_document(request):
 
 ```python
 from fastapi import FastAPI, UploadFile, HTTPException
-from md_server import MDConverter, ConversionError
+from md_server.sdk import MDConverter
 
 app = FastAPI()
 converter = MDConverter()
@@ -398,10 +398,10 @@ async def convert_endpoint(file: UploadFile):
             "metadata": {
                 "source_type": result.metadata.source_type,
                 "source_size": result.metadata.source_size,
-                "processing_time": result.metadata.processing_time
+                "conversion_time_ms": result.metadata.conversion_time_ms
             }
         }
-    except ConversionError as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 ```
 

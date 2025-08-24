@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, Any
 from dataclasses import dataclass
 
-from md_server import MDConverter, ConversionError, ConversionResult
+from md_server.sdk import MDConverter, ConversionResult
 
 
 @dataclass
@@ -125,11 +125,11 @@ async def smart_url_processing():
             print(f"✓ {url}")
             print(f"  - Strategy: {'JS rendering' if needs_js else 'Static HTML'}")
             print(f"  - Size: {result.metadata.markdown_size} chars")
-            print(f"  - Time: {result.metadata.processing_time:.2f}s")
+            print(f"  - Time: {result.metadata.conversion_time_ms / 1000:.2f}s")
 
             return result
 
-        except ConversionError as e:
+        except Exception as e:
             print(f"❌ {url} - {e}")
             raise
 
@@ -137,7 +137,7 @@ async def smart_url_processing():
     for url in urls:
         try:
             await smart_convert_url(url)
-        except ConversionError:
+        except Exception:
             continue  # Already logged
 
 
@@ -168,7 +168,7 @@ async def content_pipeline():
             pipeline_metadata = {
                 "original_size": result.metadata.source_size,
                 "markdown_size": len(processed_markdown),
-                "processing_time": result.metadata.processing_time,
+                "processing_time": result.metadata.conversion_time_ms / 1000,
                 "detected_format": result.metadata.detected_format,
                 "pipeline_step": self.processed_count,
                 "post_processed": True,
@@ -221,7 +221,7 @@ async def error_recovery_patterns():
     """Demonstrate error recovery and retry patterns."""
     print("\n=== Error Recovery Patterns ===")
 
-    from md_server import NetworkError, TimeoutError
+    # Error handling demonstration
 
     class RobustConverter:
         """Converter with built-in retry and fallback logic."""
@@ -245,21 +245,22 @@ async def error_recovery_patterns():
                     print(f"✓ Primary conversion succeeded (attempt {attempt + 1})")
                     return result
 
-                except TimeoutError:
-                    print(f"⏰ Timeout on attempt {attempt + 1}")
-                    if attempt < self.max_retries - 1:
-                        await asyncio.sleep(1.0 * (attempt + 1))  # Exponential backoff
-                        continue
-
-                except NetworkError as e:
-                    print(f"🌐 Network error on attempt {attempt + 1}: {e}")
-                    if attempt < self.max_retries - 1:
-                        await asyncio.sleep(2.0)
-                        continue
-
                 except Exception as e:
-                    print(f"❌ Unexpected error: {e}")
-                    break
+                    if "timeout" in str(e).lower():
+                        print(f"⏰ Timeout on attempt {attempt + 1}")
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(
+                                1.0 * (attempt + 1)
+                            )  # Exponential backoff
+                            continue
+                    elif "network" in str(e).lower() or "connection" in str(e).lower():
+                        print(f"🌐 Network error on attempt {attempt + 1}: {e}")
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(2.0)
+                            continue
+                    else:
+                        print(f"❌ Unexpected error: {e}")
+                        break
 
             # Fallback attempt with relaxed settings
             try:
@@ -270,7 +271,7 @@ async def error_recovery_patterns():
 
             except Exception as e:
                 print(f"❌ Fallback also failed: {e}")
-                raise ConversionError(f"All conversion attempts failed for {url}")
+                raise Exception(f"All conversion attempts failed for {url}")
 
     # Test robust converter
     robust = RobustConverter()
@@ -286,7 +287,7 @@ async def error_recovery_patterns():
             print(f"\n🔗 Testing: {url}")
             result = await robust.convert_with_retry(url)
             print(f"✅ Final result: {len(result.markdown)} chars")
-        except ConversionError as e:
+        except Exception as e:
             print(f"💥 Final failure: {e}")
 
 
@@ -393,7 +394,7 @@ async def monitoring_and_metrics():
     for file_path in test_files:
         try:
             await monitor.convert_with_monitoring(file_path)
-        except ConversionError:
+        except Exception:
             continue  # Error already logged
 
     # Generate report

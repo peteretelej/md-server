@@ -188,9 +188,10 @@ import asyncio
 
 # Create converter
 converter = MDConverter(
-    js_rendering=True,
     ocr_enabled=True,
-    extract_images=True
+    js_rendering=True,
+    extract_images=True,
+    timeout=60
 )
 
 # Async usage
@@ -206,6 +207,10 @@ async def convert_documents():
     # Convert content
     with open('file.docx', 'rb') as f:
         result = await converter.convert_content(f.read(), filename='file.docx')
+    print(result.markdown)
+    
+    # Convert text
+    result = await converter.convert_text('<h1>HTML</h1>', mime_type='text/html')
     print(result.markdown)
 
 asyncio.run(convert_documents())
@@ -230,6 +235,10 @@ async def use_remote_api():
         
         # Convert URL
         result = await client.convert_url('https://example.com')
+        print(result.markdown)
+        
+        # Convert text
+        result = await client.convert_text('<h1>HTML</h1>', mime_type='text/html')
         print(result.markdown)
 
 asyncio.run(use_remote_api())

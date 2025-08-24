@@ -7,7 +7,7 @@ Demonstrates common conversion scenarios using the Python SDK.
 
 import asyncio
 from pathlib import Path
-from md_server import MDConverter, ConversionError
+from md_server.sdk import MDConverter
 
 
 async def basic_file_conversion():
@@ -22,7 +22,7 @@ async def basic_file_conversion():
 
         print(f"✓ Converted {result.metadata.source_size} bytes")
         print(f"✓ Generated {result.metadata.markdown_size} chars of markdown")
-        print(f"✓ Processing took {result.metadata.processing_time:.2f}s")
+        print(f"✓ Processing took {result.metadata.conversion_time_ms / 1000:.2f}s")
         print(f"✓ Detected format: {result.metadata.detected_format}")
 
         # Save the result
@@ -32,7 +32,7 @@ async def basic_file_conversion():
 
     except FileNotFoundError:
         print("❌ File not found: sample.pdf")
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Conversion failed: {e}")
 
 
@@ -48,7 +48,7 @@ async def basic_url_conversion():
 
         print("✓ Converted URL content")
         print(f"✓ Generated {result.metadata.markdown_size} chars of markdown")
-        print(f"✓ Processing took {result.metadata.processing_time:.2f}s")
+        print(f"✓ Processing took {result.metadata.conversion_time_ms / 1000:.2f}s")
 
         # Print first 200 characters of markdown
         preview = (
@@ -58,7 +58,7 @@ async def basic_url_conversion():
         )
         print(f"✓ Preview: {preview}")
 
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Conversion failed: {e}")
 
 
@@ -90,7 +90,7 @@ async def basic_text_conversion():
         print(f"✓ Generated {result.metadata.markdown_size} chars of markdown")
         print(f"✓ Result:\n{result.markdown}")
 
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Conversion failed: {e}")
 
 
@@ -120,7 +120,7 @@ async def basic_content_conversion():
         print(f"✓ Detected format: {result.metadata.detected_format}")
         print(f"✓ Result:\n{result.markdown}")
 
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Conversion failed: {e}")
 
 
@@ -136,14 +136,17 @@ async def configured_converter():
         max_file_size_mb=100,  # Larger file size limit
         extract_images=True,  # Extract embedded images
         preserve_formatting=True,  # Keep complex formatting
-        debug=True,  # Enable debug logging
     )
 
     print("✓ Created converter with custom configuration:")
-    print(f"  - OCR enabled: {converter.options.ocr_enabled}")
-    print(f"  - JS rendering: {converter.options.js_rendering}")
-    print(f"  - Timeout: {converter.options.timeout}s")
-    print(f"  - Max file size: {converter.options.max_file_size_mb}MB")
+    print("  - OCR enabled: True")
+    print("  - JS rendering: True")
+    print("  - Timeout: 60s")
+    print("  - Max file size: 100MB")
+
+    # Use the converter to demonstrate it works
+    result = await converter.convert_text("<h1>Test</h1>", mime_type="text/html")
+    print(f"✓ Test conversion successful: {len(result.markdown)} chars")
 
 
 async def sync_api_example():
@@ -162,7 +165,7 @@ async def sync_api_example():
         print("✓ Sync conversion completed")
         print(f"✓ Result: {result.markdown}")
 
-    except ConversionError as e:
+    except Exception as e:
         print(f"❌ Sync conversion failed: {e}")
 
 
@@ -170,26 +173,24 @@ async def error_handling_example():
     """Demonstrate proper error handling."""
     print("\n=== Error Handling ===")
 
-    from md_server import InvalidInputError
-
     converter = MDConverter(max_file_size_mb=1)  # Very small limit for demo
 
     # Try to convert non-existent file
     try:
         await converter.convert_file("nonexistent.pdf")
-    except InvalidInputError as e:
+    except Exception as e:
         print(f"✓ Caught expected error: {e}")
 
     # Try to convert invalid URL
     try:
         await converter.convert_url("not-a-valid-url")
-    except InvalidInputError as e:
+    except Exception as e:
         print(f"✓ Caught expected error: {e}")
 
     # Try to convert empty text
     try:
         await converter.convert_text("", mime_type="text/html")
-    except InvalidInputError as e:
+    except Exception as e:
         print(f"✓ Caught expected error: {e}")
 
 
