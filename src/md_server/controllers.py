@@ -16,6 +16,7 @@ from .core.converter import DocumentConverter
 from .core.validation import ValidationError
 from .core.config import Settings
 from .core.detection import ContentTypeDetector
+from .security import SSRFError
 
 
 class ConvertController(Controller):
@@ -68,6 +69,17 @@ class ConvertController(Controller):
 
         except ValidationError as e:
             return self._handle_validation_error(e)
+        except SSRFError as e:
+            error_response = ErrorResponse.create_error(
+                code="SSRF_BLOCKED",
+                message="URL targets a blocked resource",
+                details={"reason": e.blocked_reason},
+                suggestions=[
+                    "Use a publicly accessible URL",
+                    "Contact administrator if internal access is required",
+                ],
+            )
+            raise HTTPException(status_code=400, detail=error_response.model_dump())
         except ValueError as e:
             error_response = ErrorResponse.create_error(
                 code="INVALID_INPUT",

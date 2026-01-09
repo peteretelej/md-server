@@ -42,6 +42,15 @@ class Settings(BaseSettings):
         default="google/gemini-2.5-flash", description="LLM model identifier"
     )
 
+    allow_localhost: bool = Field(
+        default=True,
+        description="Allow fetching URLs that resolve to localhost (127.x, ::1)",
+    )
+    allow_private_networks: bool = Field(
+        default=False,
+        description="Allow fetching URLs that resolve to private IP ranges (10.x, 172.16.x, 192.168.x) and cloud metadata",
+    )
+
     allowed_file_types: List[str] = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

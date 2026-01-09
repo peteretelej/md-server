@@ -6,8 +6,9 @@ from typing import Optional, Dict, Any, Union
 
 from markitdown import MarkItDown, StreamInfo
 
-from .config import get_logger
+from .config import get_logger, get_settings
 from ..models import ConversionResult, ConversionMetadata
+from ..security import validate_url
 
 logger = get_logger("core.converter")
 
@@ -88,6 +89,14 @@ class DocumentConverter:
 
     async def convert_url(self, url: str, **options) -> ConversionResult:
         start_time = time.time()
+
+        # SSRF validation - check URL doesn't target blocked networks
+        settings = get_settings()
+        validate_url(
+            url,
+            allow_localhost=settings.allow_localhost,
+            allow_private_networks=settings.allow_private_networks,
+        )
 
         self._validate_url(url)
 

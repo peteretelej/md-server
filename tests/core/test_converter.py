@@ -67,9 +67,13 @@ class TestDocumentConverter:
 
     @pytest.mark.asyncio
     async def test_convert_url_success(self, converter):
-        with patch(
-            "md_server.core.converter.DocumentConverter._convert_url_with_markitdown"
-        ) as mock_convert:
+        with (
+            patch("md_server.core.converter.validate_url") as mock_validate,
+            patch(
+                "md_server.core.converter.DocumentConverter._convert_url_with_markitdown"
+            ) as mock_convert,
+        ):
+            mock_validate.return_value = "https://example.com"
             mock_convert.return_value = "# Test Content"
             result = await converter.convert_url("https://example.com")
             assert result.success is True
@@ -144,9 +148,13 @@ class TestDocumentConverter:
         converter.js_rendering = True
         converter._browser_available = True
 
-        with patch(
-            "md_server.core.converter.DocumentConverter._crawl_with_browser"
-        ) as mock_crawl:
+        with (
+            patch("md_server.core.converter.validate_url") as mock_validate,
+            patch(
+                "md_server.core.converter.DocumentConverter._crawl_with_browser"
+            ) as mock_crawl,
+        ):
+            mock_validate.return_value = "https://example.com"
             mock_crawl.return_value = "# Crawled Content"
             result = await converter.convert_url("https://example.com")
             assert result.success is True
@@ -158,9 +166,13 @@ class TestDocumentConverter:
         converter.js_rendering = True
         converter._browser_available = False
 
-        with patch(
-            "md_server.core.converter.DocumentConverter._convert_url_with_markitdown"
-        ) as mock_convert:
+        with (
+            patch("md_server.core.converter.validate_url") as mock_validate,
+            patch(
+                "md_server.core.converter.DocumentConverter._convert_url_with_markitdown"
+            ) as mock_convert,
+        ):
+            mock_validate.return_value = "https://example.com"
             mock_convert.return_value = "# MarkItDown Content"
             result = await converter.convert_url("https://example.com")
             assert result.success is True
@@ -244,9 +256,13 @@ class TestDocumentConverter:
         # Test timeout handling in URL conversion
         converter.timeout = 1  # Very short timeout
 
-        with patch(
-            "md_server.core.converter.DocumentConverter._sync_convert_url"
-        ) as mock_sync:
+        with (
+            patch("md_server.core.converter.validate_url") as mock_validate,
+            patch(
+                "md_server.core.converter.DocumentConverter._sync_convert_url"
+            ) as mock_sync,
+        ):
+            mock_validate.return_value = "https://slow-website.com"
 
             def slow_conversion(url):
                 import time

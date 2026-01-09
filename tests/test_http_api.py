@@ -64,6 +64,7 @@ class TestConvertUnifiedEndpoint:
 
     def test_convert_url_success(self, client, test_server):
         # Use a simple URL that should work
+        # Note: localhost is allowed by default for testing and local MCP use
         response = client.post("/convert", json={"url": test_server.url("simple.html")})
         # This might fail in CI without internet, so accept either success or failure
         assert response.status_code in [200, 500, 422]
@@ -140,6 +141,7 @@ class TestAdvancedErrorPaths:
     """Test advanced error handling paths for edge cases"""
 
     def test_network_error_url_conversion(self, client, test_server):
+        # Note: localhost is allowed by default, so this tests actual network errors
         response = client.post(
             "/convert", json={"url": test_server.url("nonexistent.html")}
         )
@@ -149,9 +151,10 @@ class TestAdvancedErrorPaths:
         if "success" in data:
             assert data["success"] is False
         elif "detail" in data:
-            assert "error" in data["detail"].lower() or data["status_code"] == 500
+            assert "error" in data["detail"] or data["status_code"] == 500
 
     def test_connection_error_simulation(self, client):
+        # Note: localhost is allowed by default, so this tests actual connection errors
         response = client.post(
             "/convert", json={"url": "http://127.0.0.1:1/nonexistent"}
         )
@@ -161,7 +164,7 @@ class TestAdvancedErrorPaths:
         if "success" in data:
             assert data["success"] is False
         elif "detail" in data:
-            assert "error" in data["detail"].lower() or data["status_code"] == 500
+            assert "error" in data["detail"] or data["status_code"] == 500
 
     def test_file_size_too_large_error(self, client):
         large_content = "x" * (50 * 1024 * 1024 + 1)
@@ -494,3 +497,80 @@ class TestOptionsAndCors:
         )
         # Should handle OPTIONS request (exact response depends on CORS config)
         assert response.status_code in [200, 204]
+
+
+class TestSSRFProtectionIntegration:
+    """Integration tests for SSRF protection."""
+
+    def test_convert_blocks_private_url_192(self, client):
+        """Block 192.168.x.x private range."""
+        response = client.post("/convert", json={"url": "http://192.168.1.1/"})
+        assert response.status_code == 400
+        data = response.json()
+        assert data["detail"]["error"]["code"] == "SSRF_BLOCKED"
+        assert data["detail"]["error"]["details"]["reason"] == "private_ip_range"
+
+    def test_convert_blocks_private_url_10(self, client):
+        """Block 10.x.x.x private range."""
+        response = client.post("/convert", json={"url": "http://10.0.0.1/"})
+        assert response.status_code == 400
+        data = response.json()
+        assert data["detail"]["error"]["code"] == "SSRF_BLOCKED"
+        assert data["detail"]["error"]["details"]["reason"] == "private_ip_range"
+
+    def test_convert_blocks_private_url_172(self, client):
+        """Block 172.16.x.x private range."""
+        response = client.post("/convert", json={"url": "http://172.16.0.1/"})
+        assert response.status_code == 400
+        data = response.json()
+        assert data["detail"]["error"]["code"] == "SSRF_BLOCKED"
+        assert data["detail"]["error"]["details"]["reason"] == "private_ip_range"
+
+    def test_convert_allows_localhost_by_default(self, client):
+        """Localhost is allowed by default for local MCP/dev use."""
+        # Note: This will fail to connect but won't be SSRF blocked
+        response = client.post("/convert", json={"url": "http://localhost:59999/"})
+        # Should NOT be 400 with SSRF_BLOCKED - connection error is acceptable
+        if response.status_code == 400:
+            data = response.json()
+            # If it's 400, it should NOT be SSRF blocked
+            assert data["detail"]["error"]["code"] != "SSRF_BLOCKED"
+
+    def test_convert_allows_127_0_0_1_by_default(self, client):
+        """127.0.0.1 is allowed by default for local MCP/dev use."""
+        # Note: This will fail to connect but won't be SSRF blocked
+        response = client.post("/convert", json={"url": "http://127.0.0.1:59999/"})
+        # Should NOT be 400 with SSRF_BLOCKED - connection error is acceptable
+        if response.status_code == 400:
+            data = response.json()
+            assert data["detail"]["error"]["code"] != "SSRF_BLOCKED"
+
+    def test_convert_blocks_aws_metadata(self, client):
+        """Block AWS metadata endpoint (169.254.169.254)."""
+        response = client.post(
+            "/convert",
+            json={"url": "http://169.254.169.254/latest/meta-data/"},
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert data["detail"]["error"]["code"] == "SSRF_BLOCKED"
+        assert data["detail"]["error"]["details"]["reason"] == "dangerous_ip_range"
+
+    def test_convert_blocks_file_scheme(self, client):
+        """Block file:// scheme."""
+        response = client.post("/convert", json={"url": "file:///etc/passwd"})
+        assert response.status_code == 400
+        data = response.json()
+        assert data["detail"]["error"]["code"] == "SSRF_BLOCKED"
+        assert data["detail"]["error"]["details"]["reason"] == "invalid_scheme"
+
+    def test_ssrf_error_response_format(self, client):
+        """Verify SSRF error response includes suggestions."""
+        response = client.post("/convert", json={"url": "http://192.168.1.1/"})
+        assert response.status_code == 400
+        data = response.json()
+        error = data["detail"]["error"]
+        assert error["code"] == "SSRF_BLOCKED"
+        assert error["message"] == "URL targets a blocked resource"
+        assert "suggestions" in error
+        assert len(error["suggestions"]) > 0
