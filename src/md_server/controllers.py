@@ -36,10 +36,16 @@ class ConvertController(Controller):
             # Parse request to determine input type and data
             input_data = await self._parse_request(request)
 
+            # Extract options that are passed to the converter
+            options = {
+                "js_rendering": input_data.get("js_rendering"),
+                "include_frontmatter": input_data.get("include_frontmatter", False),
+            }
+
             # Use core converter for conversion based on input type
             if input_data.get("url"):
                 result = await document_converter.convert_url(
-                    input_data["url"], js_rendering=input_data.get("js_rendering")
+                    input_data["url"], **options
                 )
             elif input_data.get("content"):
                 # Decode base64 content if needed
@@ -52,13 +58,13 @@ class ConvertController(Controller):
                     content = input_data["content"]
 
                 result = await document_converter.convert_content(
-                    content, filename=input_data.get("filename")
+                    content, filename=input_data.get("filename"), **options
                 )
             elif input_data.get("text"):
                 # Determine MIME type: if specified use it, otherwise use markdown for backward compatibility
                 mime_type = input_data.get("mime_type", "text/markdown")
                 result = await document_converter.convert_text(
-                    input_data["text"], mime_type
+                    input_data["text"], mime_type, **options
                 )
             else:
                 raise ValueError("No valid input provided (url, content, or text)")
@@ -167,6 +173,9 @@ class ConvertController(Controller):
             conversion_time_ms=total_time_ms,
             detected_format=result.metadata.detected_format,
             warnings=[],
+            title=result.metadata.title,
+            estimated_tokens=result.metadata.estimated_tokens,
+            detected_language=result.metadata.detected_language,
         )
 
     def _handle_validation_error(

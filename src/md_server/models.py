@@ -23,6 +23,9 @@ class ConversionOptions(BaseModel):
     clean_markdown: Optional[bool] = Field(
         default=False, description="Normalize/clean markdown output"
     )
+    include_frontmatter: Optional[bool] = Field(
+        default=False, description="Prepend YAML frontmatter with metadata to output"
+    )
 
 
 class ConvertRequest(BaseModel):
@@ -63,6 +66,11 @@ class ConversionMetadata(BaseModel):
     )
     detected_format: str = Field(description="Detected format/MIME type")
     warnings: List[str] = Field(default_factory=list, description="Conversion warnings")
+    title: Optional[str] = Field(default=None, description="Extracted document title")
+    estimated_tokens: int = Field(default=0, description="Estimated token count")
+    detected_language: Optional[str] = Field(
+        default=None, description="ISO 639-1 language code"
+    )
 
 
 class ConversionResult(BaseModel):
@@ -92,6 +100,9 @@ class ConvertResponse(BaseModel):
         conversion_time_ms: int,
         detected_format: str,
         warnings: Optional[List[str]] = None,
+        title: Optional[str] = None,
+        estimated_tokens: int = 0,
+        detected_language: Optional[str] = None,
     ) -> "ConvertResponse":
         return cls(
             success=True,
@@ -103,6 +114,9 @@ class ConvertResponse(BaseModel):
                 conversion_time_ms=conversion_time_ms,
                 detected_format=detected_format,
                 warnings=warnings or [],
+                title=title,
+                estimated_tokens=estimated_tokens,
+                detected_language=detected_language,
             ),
             request_id=f"req_{uuid.uuid4()}",
         )

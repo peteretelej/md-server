@@ -574,3 +574,95 @@ class TestSSRFProtectionIntegration:
         assert error["message"] == "URL targets a blocked resource"
         assert "suggestions" in error
         assert len(error["suggestions"]) > 0
+
+
+@pytest.mark.integration
+class TestEnhancedMetadata:
+    """Test enhanced metadata extraction in API responses."""
+
+    def test_response_includes_new_metadata_fields(self, client):
+        """API response should include title, estimated_tokens, and detected_language."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Hello World\n\nThis is English content for testing."},
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "title" in data["metadata"]
+        assert "estimated_tokens" in data["metadata"]
+        assert "detected_language" in data["metadata"]
+
+    def test_title_extraction(self, client):
+        """Title should be extracted from H1 heading."""
+        response = client.post(
+            "/convert",
+            json={"text": "# My Document Title\n\nSome content here."},
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["metadata"]["title"] == "My Document Title"
+
+    def test_token_estimation(self, client):
+        """Token count should be estimated for content."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Test\n\nThis is a test document with some content."},
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["metadata"]["estimated_tokens"] > 0
+
+    def test_language_detection(self, client):
+        """Language should be detected from content."""
+        response = client.post(
+            "/convert",
+            json={
+                "text": "# English Document\n\nThis is a sample document written in English for language detection testing purposes."
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["metadata"]["detected_language"] == "en"
+
+    def test_frontmatter_option(self, client):
+        """include_frontmatter option should prepend YAML frontmatter."""
+        response = client.post(
+            "/convert",
+            json={
+                "text": "# Test Document\n\nContent here for testing frontmatter.",
+                "options": {"include_frontmatter": True},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["markdown"].startswith("---")
+        assert "title:" in data["markdown"]
+        assert "tokens:" in data["markdown"]
+
+    def test_frontmatter_disabled_by_default(self, client):
+        """Frontmatter should not be included by default."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Test Document\n\nContent here."},
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert not data["markdown"].startswith("---")
+
+    def test_metadata_with_short_content(self, client):
+        """Short content should handle gracefully (no language detection)."""
+        response = client.post(
+            "/convert",
+            json={"text": "Hi"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["metadata"]["estimated_tokens"] > 0
+        assert data["metadata"]["detected_language"] is None

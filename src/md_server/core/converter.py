@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, Union
 from markitdown import MarkItDown, StreamInfo
 
 from .config import get_logger, get_settings
+from ..metadata import MetadataExtractor
 from ..models import ConversionResult, ConversionMetadata
 from ..security import validate_url
 
@@ -34,6 +35,7 @@ class DocumentConverter:
 
         self._markitdown = MarkItDown()
         self._browser_available = self._check_browser_availability()
+        self._metadata_extractor = MetadataExtractor()
 
     def _check_browser_availability(self) -> bool:
         try:
@@ -71,6 +73,16 @@ class DocumentConverter:
         else:
             markdown = await self._convert_content_async(content, filename, options)
 
+        include_frontmatter = options.get("include_frontmatter", False)
+        if include_frontmatter:
+            markdown, extracted = self._metadata_extractor.with_frontmatter(
+                markdown,
+                source=filename,
+                source_type=self._get_simple_type(detected_format),
+            )
+        else:
+            extracted = self._metadata_extractor.extract(markdown)
+
         processing_time = time.time() - start_time
 
         metadata = ConversionMetadata(
@@ -79,6 +91,9 @@ class DocumentConverter:
             markdown_size=len(markdown),
             conversion_time_ms=int(processing_time * 1000),
             detected_format=detected_format,
+            title=extracted.title,
+            estimated_tokens=extracted.estimated_tokens,
+            detected_language=extracted.detected_language,
         )
 
         return ConversionResult(
@@ -109,6 +124,16 @@ class DocumentConverter:
             markdown = await self._convert_url_with_markitdown(url)
             source_size = len(markdown)
 
+        include_frontmatter = options.get("include_frontmatter", False)
+        if include_frontmatter:
+            markdown, extracted = self._metadata_extractor.with_frontmatter(
+                markdown,
+                source=url,
+                source_type="html",
+            )
+        else:
+            extracted = self._metadata_extractor.extract(markdown)
+
         processing_time = time.time() - start_time
 
         metadata = ConversionMetadata(
@@ -117,6 +142,9 @@ class DocumentConverter:
             markdown_size=len(markdown),
             conversion_time_ms=int(processing_time * 1000),
             detected_format="text/html",
+            title=extracted.title,
+            estimated_tokens=extracted.estimated_tokens,
+            detected_language=extracted.detected_language,
         )
 
         return ConversionResult(
@@ -139,6 +167,16 @@ class DocumentConverter:
         detected_format = self._detect_format(content, filename)
         markdown = await self._convert_content_async(content, filename, options)
 
+        include_frontmatter = options.get("include_frontmatter", False)
+        if include_frontmatter:
+            markdown, extracted = self._metadata_extractor.with_frontmatter(
+                markdown,
+                source=filename,
+                source_type=self._get_simple_type(detected_format),
+            )
+        else:
+            extracted = self._metadata_extractor.extract(markdown)
+
         processing_time = time.time() - start_time
 
         metadata = ConversionMetadata(
@@ -147,6 +185,9 @@ class DocumentConverter:
             markdown_size=len(markdown),
             conversion_time_ms=int(processing_time * 1000),
             detected_format=detected_format,
+            title=extracted.title,
+            estimated_tokens=extracted.estimated_tokens,
+            detected_language=extracted.detected_language,
         )
 
         return ConversionResult(
@@ -172,6 +213,16 @@ class DocumentConverter:
         if self.clean_markdown:
             markdown = self._clean_markdown(markdown)
 
+        include_frontmatter = options.get("include_frontmatter", False)
+        if include_frontmatter:
+            markdown, extracted = self._metadata_extractor.with_frontmatter(
+                markdown,
+                source=None,
+                source_type=self._get_simple_type(mime_type),
+            )
+        else:
+            extracted = self._metadata_extractor.extract(markdown)
+
         processing_time = time.time() - start_time
 
         metadata = ConversionMetadata(
@@ -180,6 +231,9 @@ class DocumentConverter:
             markdown_size=len(markdown),
             conversion_time_ms=int(processing_time * 1000),
             detected_format=mime_type,
+            title=extracted.title,
+            estimated_tokens=extracted.estimated_tokens,
+            detected_language=extracted.detected_language,
         )
 
         return ConversionResult(
@@ -386,3 +440,23 @@ class DocumentConverter:
             cleaned_lines.pop()
 
         return "\n".join(cleaned_lines)
+
+    def _get_simple_type(self, mime_type: str) -> str:
+        """Convert MIME type to simple type name for frontmatter."""
+        type_map = {
+            "application/pdf": "pdf",
+            "text/html": "html",
+            "text/plain": "text",
+            "text/markdown": "markdown",
+            "application/json": "json",
+            "application/xml": "xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+            "image/png": "png",
+            "image/jpeg": "jpeg",
+            "image/gif": "gif",
+            "audio/wav": "wav",
+            "audio/mp3": "mp3",
+        }
+        return type_map.get(mime_type, "unknown")
