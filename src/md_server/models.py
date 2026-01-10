@@ -26,6 +26,10 @@ class ConversionOptions(BaseModel):
     include_frontmatter: Optional[bool] = Field(
         default=False, description="Prepend YAML frontmatter with metadata to output"
     )
+    output_format: Optional[str] = Field(
+        default=None,
+        description="Response format: 'json' (default) or 'markdown' (raw markdown with metadata in headers)",
+    )
 
 
 class ConvertRequest(BaseModel):

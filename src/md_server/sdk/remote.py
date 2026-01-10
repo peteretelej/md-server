@@ -37,18 +37,48 @@ class RemoteMDConverter:
         await self._client.aclose()
 
     async def convert_file(
-        self, file_path: Union[str, Path], **options
-    ) -> ConversionResult:
-        """Convert a local file using remote API."""
+        self,
+        file_path: Union[str, Path],
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
+        """
+        Convert a local file using remote API.
+
+        Args:
+            file_path: Path to the file to convert
+            raw_markdown: If True, return raw Markdown string instead of ConversionResult
+            **options: Additional conversion options
+
+        Returns:
+            ConversionResult if raw_markdown=False, else raw Markdown string
+        """
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
         content = path.read_bytes()
-        return await self.convert_content(content, filename=path.name, **options)
+        return await self.convert_content(
+            content, filename=path.name, raw_markdown=raw_markdown, **options
+        )
 
-    async def convert_url(self, url: str, **options) -> ConversionResult:
-        """Convert a URL using remote API."""
+    async def convert_url(
+        self,
+        url: str,
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
+        """
+        Convert a URL using remote API.
+
+        Args:
+            url: URL to convert
+            raw_markdown: If True, return raw Markdown string instead of ConversionResult
+            **options: Additional conversion options
+
+        Returns:
+            ConversionResult if raw_markdown=False, else raw Markdown string
+        """
         if not url or not url.strip():
             raise ValueError("URL cannot be empty")
 
@@ -59,16 +89,40 @@ class RemoteMDConverter:
         if options:
             data["options"] = options
 
-        response = await self._client.post(f"{self.endpoint}/convert", json=data)
+        headers = {}
+        if raw_markdown:
+            headers["Accept"] = "text/markdown"
+
+        response = await self._client.post(
+            f"{self.endpoint}/convert", json=data, headers=headers
+        )
         response.raise_for_status()
+
+        if raw_markdown:
+            return response.text
 
         result = response.json()
         return self._parse_response(result)
 
     async def convert_content(
-        self, content: bytes, filename: Optional[str] = None, **options
-    ) -> ConversionResult:
-        """Convert binary content using remote API."""
+        self,
+        content: bytes,
+        filename: Optional[str] = None,
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
+        """
+        Convert binary content using remote API.
+
+        Args:
+            content: Binary content to convert
+            filename: Optional filename hint for format detection
+            raw_markdown: If True, return raw Markdown string instead of ConversionResult
+            **options: Additional conversion options
+
+        Returns:
+            ConversionResult if raw_markdown=False, else raw Markdown string
+        """
         if not content:
             raise ValueError("Content cannot be empty")
 
@@ -80,16 +134,40 @@ class RemoteMDConverter:
         if options:
             data["options"] = options
 
-        response = await self._client.post(f"{self.endpoint}/convert", json=data)
+        headers = {}
+        if raw_markdown:
+            headers["Accept"] = "text/markdown"
+
+        response = await self._client.post(
+            f"{self.endpoint}/convert", json=data, headers=headers
+        )
         response.raise_for_status()
+
+        if raw_markdown:
+            return response.text
 
         result = response.json()
         return self._parse_response(result)
 
     async def convert_text(
-        self, text: str, mime_type: str = "text/plain", **options
-    ) -> ConversionResult:
-        """Convert text with MIME type using remote API."""
+        self,
+        text: str,
+        mime_type: str = "text/plain",
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
+        """
+        Convert text with MIME type using remote API.
+
+        Args:
+            text: Text content to convert
+            mime_type: MIME type of the text content
+            raw_markdown: If True, return raw Markdown string instead of ConversionResult
+            **options: Additional conversion options
+
+        Returns:
+            ConversionResult if raw_markdown=False, else raw Markdown string
+        """
         if not text or not text.strip():
             raise ValueError("Text cannot be empty")
 
@@ -97,33 +175,66 @@ class RemoteMDConverter:
         if options:
             data["options"] = options
 
-        response = await self._client.post(f"{self.endpoint}/convert", json=data)
+        headers = {}
+        if raw_markdown:
+            headers["Accept"] = "text/markdown"
+
+        response = await self._client.post(
+            f"{self.endpoint}/convert", json=data, headers=headers
+        )
         response.raise_for_status()
+
+        if raw_markdown:
+            return response.text
 
         result = response.json()
         return self._parse_response(result)
 
     def convert_file_sync(
-        self, file_path: Union[str, Path], **options
-    ) -> ConversionResult:
+        self,
+        file_path: Union[str, Path],
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
         """Synchronous version of convert_file."""
-        return asyncio.run(self.convert_file(file_path, **options))
+        return asyncio.run(
+            self.convert_file(file_path, raw_markdown=raw_markdown, **options)
+        )
 
-    def convert_url_sync(self, url: str, **options) -> ConversionResult:
+    def convert_url_sync(
+        self,
+        url: str,
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
         """Synchronous version of convert_url."""
-        return asyncio.run(self.convert_url(url, **options))
+        return asyncio.run(self.convert_url(url, raw_markdown=raw_markdown, **options))
 
     def convert_content_sync(
-        self, content: bytes, filename: Optional[str] = None, **options
-    ) -> ConversionResult:
+        self,
+        content: bytes,
+        filename: Optional[str] = None,
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
         """Synchronous version of convert_content."""
-        return asyncio.run(self.convert_content(content, filename, **options))
+        return asyncio.run(
+            self.convert_content(
+                content, filename, raw_markdown=raw_markdown, **options
+            )
+        )
 
     def convert_text_sync(
-        self, text: str, mime_type: str = "text/plain", **options
-    ) -> ConversionResult:
+        self,
+        text: str,
+        mime_type: str = "text/plain",
+        raw_markdown: bool = False,
+        **options,
+    ) -> Union[ConversionResult, str]:
         """Synchronous version of convert_text."""
-        return asyncio.run(self.convert_text(text, mime_type, **options))
+        return asyncio.run(
+            self.convert_text(text, mime_type, raw_markdown=raw_markdown, **options)
+        )
 
     def _parse_response(self, response: Dict[str, Any]) -> ConversionResult:
         """Parse API response to ConversionResult."""

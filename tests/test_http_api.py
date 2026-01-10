@@ -666,3 +666,195 @@ class TestEnhancedMetadata:
 
         assert data["metadata"]["estimated_tokens"] > 0
         assert data["metadata"]["detected_language"] is None
+
+
+@pytest.mark.integration
+class TestContentNegotiation:
+    """Test Accept header content negotiation."""
+
+    def test_json_response_default(self, client):
+        """Default response is JSON when no Accept header provided."""
+        response = client.post("/convert", json={"text": "# Hello World"})
+        assert response.status_code == 200
+        assert "application/json" in response.headers["content-type"]
+
+        data = response.json()
+        assert "success" in data
+        assert "markdown" in data
+
+    def test_json_response_explicit(self, client):
+        """Explicit Accept: application/json returns JSON."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Hello World"},
+            headers={"Accept": "application/json"},
+        )
+        assert response.status_code == 200
+        assert "application/json" in response.headers["content-type"]
+
+        data = response.json()
+        assert data["success"] is True
+        assert "markdown" in data
+
+    def test_markdown_response(self, client):
+        """Accept: text/markdown returns raw Markdown."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Hello World"},
+            headers={"Accept": "text/markdown"},
+        )
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]
+        assert "charset=utf-8" in response.headers["content-type"]
+        assert response.text.startswith("# Hello World")
+
+    def test_markdown_response_x_markdown(self, client):
+        """Accept: text/x-markdown also works."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Test"},
+            headers={"Accept": "text/x-markdown"},
+        )
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]
+
+    def test_markdown_response_includes_headers(self, client):
+        """Markdown response includes metadata headers."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Hello World\n\nSome content."},
+            headers={"Accept": "text/markdown"},
+        )
+        assert response.status_code == 200
+
+        # Check required headers
+        assert "X-Request-Id" in response.headers
+        assert "X-Source-Type" in response.headers
+        assert "X-Source-Size" in response.headers
+        assert "X-Markdown-Size" in response.headers
+        assert "X-Conversion-Time-Ms" in response.headers
+        assert "X-Detected-Format" in response.headers
+
+    def test_markdown_response_request_id_format(self, client):
+        """Request ID has expected format."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Test"},
+            headers={"Accept": "text/markdown"},
+        )
+        assert response.headers["X-Request-Id"].startswith("req_")
+
+    def test_markdown_response_optional_headers(self, client):
+        """Optional headers present when data is available."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Document Title\n\nThis is English content for testing."},
+            headers={"Accept": "text/markdown"},
+        )
+        assert response.status_code == 200
+
+        # Token estimation should be present
+        assert "X-Estimated-Tokens" in response.headers
+        assert int(response.headers["X-Estimated-Tokens"]) > 0
+
+        # Title should be present and URL-encoded
+        assert "X-Title" in response.headers
+
+    def test_markdown_response_preserves_content(self, client):
+        """Raw markdown response preserves original content."""
+        input_text = "# My Heading\n\nParagraph with **bold** and *italic*."
+        response = client.post(
+            "/convert",
+            json={"text": input_text},
+            headers={"Accept": "text/markdown"},
+        )
+        assert response.status_code == 200
+        assert "# My Heading" in response.text
+        assert "**bold**" in response.text
+
+    def test_error_returns_json_despite_accept_header(self, client):
+        """Errors return JSON regardless of Accept header."""
+        response = client.post(
+            "/convert",
+            json={},  # Missing required field
+            headers={"Accept": "text/markdown"},
+        )
+        # Error responses should be JSON
+        assert response.status_code >= 400
+
+    def test_markdown_response_with_multipart(self, client, simple_html_file):
+        """Multipart uploads also support content negotiation."""
+        if simple_html_file.exists():
+            with open(simple_html_file, "rb") as f:
+                response = client.post(
+                    "/convert",
+                    files={"file": ("test.html", f, "text/html")},
+                    headers={"Accept": "text/markdown"},
+                )
+            assert response.status_code == 200
+            assert "text/markdown" in response.headers["content-type"]
+
+    def test_markdown_with_charset_in_accept(self, client):
+        """Accept: text/markdown; charset=utf-8 works."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Test"},
+            headers={"Accept": "text/markdown; charset=utf-8"},
+        )
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]
+
+    def test_output_format_option_markdown(self, client):
+        """output_format: 'markdown' option returns raw Markdown."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Hello World", "options": {"output_format": "markdown"}},
+        )
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]
+        assert response.text.startswith("# Hello World")
+
+    def test_output_format_option_json(self, client):
+        """output_format: 'json' option returns JSON (explicit default)."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Hello World", "options": {"output_format": "json"}},
+        )
+        assert response.status_code == 200
+        assert "application/json" in response.headers["content-type"]
+        data = response.json()
+        assert data["success"] is True
+
+    def test_output_format_option_case_insensitive(self, client):
+        """output_format option is case-insensitive."""
+        response = client.post(
+            "/convert",
+            json={"text": "# Test", "options": {"output_format": "MARKDOWN"}},
+        )
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]
+
+    def test_output_format_includes_metadata_headers(self, client):
+        """output_format: 'markdown' includes metadata headers."""
+        response = client.post(
+            "/convert",
+            json={
+                "text": "# Document\n\nContent here.",
+                "options": {"output_format": "markdown"},
+            },
+        )
+        assert response.status_code == 200
+        assert "X-Request-Id" in response.headers
+        assert "X-Source-Type" in response.headers
+        assert "X-Markdown-Size" in response.headers
+
+    def test_accept_header_takes_precedence(self, client):
+        """Accept header takes precedence over output_format option."""
+        # Accept header says markdown, option says json - Accept wins
+        response = client.post(
+            "/convert",
+            json={"text": "# Test", "options": {"output_format": "json"}},
+            headers={"Accept": "text/markdown"},
+        )
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]

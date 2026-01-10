@@ -1,4 +1,5 @@
 from typing import Union
+from urllib.parse import quote
 from litestar import Controller, post, Request
 from litestar.response import Response
 from litestar.exceptions import HTTPException
@@ -17,6 +18,50 @@ from .core.validation import ValidationError
 from .core.config import Settings
 from .core.detection import ContentTypeDetector
 from .security import SSRFError
+
+
+def _wants_markdown(accept_header: str, output_format: str = None) -> bool:
+    """
+    Check if client prefers Markdown over JSON.
+
+    Priority: Accept header > output_format option > default (JSON)
+    """
+    # Check Accept header first
+    if accept_header:
+        accept_lower = accept_header.lower()
+        if "text/markdown" in accept_lower or "text/x-markdown" in accept_lower:
+            return True
+
+    # Check output_format option
+    if output_format and output_format.lower() == "markdown":
+        return True
+
+    return False
+
+
+def _create_markdown_headers(
+    response: ConvertResponse, conversion_time_ms: int
+) -> dict:
+    """Create HTTP headers from conversion result metadata."""
+    headers = {
+        "X-Request-Id": response.request_id,
+        "X-Source-Type": response.metadata.source_type,
+        "X-Source-Size": str(response.metadata.source_size),
+        "X-Markdown-Size": str(response.metadata.markdown_size),
+        "X-Conversion-Time-Ms": str(conversion_time_ms),
+        "X-Detected-Format": response.metadata.detected_format,
+    }
+
+    if response.metadata.estimated_tokens:
+        headers["X-Estimated-Tokens"] = str(response.metadata.estimated_tokens)
+
+    if response.metadata.detected_language:
+        headers["X-Detected-Language"] = response.metadata.detected_language
+
+    if response.metadata.title:
+        headers["X-Title"] = quote(response.metadata.title, safe="")
+
+    return headers
 
 
 class ConvertController(Controller):
@@ -70,7 +115,20 @@ class ConvertController(Controller):
                 raise ValueError("No valid input provided (url, content, or text)")
 
             # Convert SDK result to API response format
+            conversion_time_ms = int((time.time() - start_time) * 1000)
             response = self._create_success_response_from_sdk(result, start_time)
+
+            # Check for content negotiation (Accept header or output_format option)
+            accept_header = request.headers.get("accept", "")
+            output_format = input_data.get("output_format")
+            if _wants_markdown(accept_header, output_format):
+                return Response(
+                    content=result.markdown,
+                    status_code=HTTP_200_OK,
+                    media_type="text/markdown; charset=utf-8",
+                    headers=_create_markdown_headers(response, conversion_time_ms),
+                )
+
             return Response(response, status_code=HTTP_200_OK)
 
         except ValidationError as e:
