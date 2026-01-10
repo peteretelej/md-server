@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Install essential tools (ffmpeg, curl)
 RUN apt-get update && apt-get install -y \
@@ -14,12 +14,9 @@ COPY src/ ./src/
 
 RUN uv sync --frozen --no-dev
 
-# Install Chromium browser and its system dependencies
-# install-deps needs apt-get, so we update, install deps, then clean up
-RUN uv run playwright install chromium \
-    && apt-get update \
-    && uv run playwright install-deps chromium \
-    && rm -rf /var/lib/apt/lists/*
+# Install Chromium browser and system dependencies in one command
+# --with-deps installs both browser binaries AND required system libraries
+RUN uv run playwright install --with-deps chromium
 
 EXPOSE 8080
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-server"
-version = "0.1.4"
+version = "0.1.5"
 description = "HTTP API server for converting documents, web pages, and media to markdown"
 readme = "README.md"
 requires-python = ">=3.10"
