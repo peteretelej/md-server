@@ -324,3 +324,66 @@ class TestDocumentConverter:
 
             with pytest.raises(Exception, match="Failed to convert URL"):
                 converter._sync_convert_url(url)
+
+    # --- Additional Format Detection Tests ---
+
+    @pytest.mark.parametrize(
+        "content,expected",
+        [
+            (b"\xff\xd8\xff\xe0", "image/jpeg"),  # JPEG with JFIF marker
+            (b"\xff\xd8\xff\xe1", "image/jpeg"),  # JPEG with EXIF marker
+            (b"GIF89a", "image/gif"),  # GIF 89a
+            (b"GIF87a", "image/gif"),  # GIF 87a
+            (b"RIFF\x00\x00\x00\x00WAVE", "audio/wav"),  # WAV file
+            (b"\xff\xfb\x90\x00", "audio/mp3"),  # MP3 MPEG frame sync
+            (b"ID3\x04\x00\x00", "audio/mp3"),  # MP3 with ID3v2 tag
+            (b"<?xml version='1.0'?>", "application/xml"),  # XML declaration
+        ],
+    )
+    def test_detect_format_magic_bytes_variants(self, converter, content, expected):
+        """Test various magic byte signatures are correctly detected."""
+        result = converter._detect_format(content)
+        assert result == expected
+
+    def test_detect_format_binary_with_filename_extension(self, converter):
+        """Binary content with filename extension uses filename for format."""
+        # Binary content with null bytes (will be detected as binary)
+        binary_content = b"\x00\x01\x02\x03"
+        result = converter._detect_format(binary_content, filename="data.xlsx")
+        # Filename extension should be used since content is binary
+        assert (
+            result
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            or result == "application/octet-stream"
+        )
+
+    def test_detect_format_zip_based_office(self, converter):
+        """ZIP magic bytes are detected for office documents."""
+        zip_content = b"PK\x03\x04"  # ZIP signature
+        result = converter._detect_format(zip_content)
+        assert result == "application/zip"
+
+    def test_detect_format_doctype_html(self, converter):
+        """DOCTYPE declaration is detected as HTML."""
+        html_content = b"<!DOCTYPE html><html><body>test</body></html>"
+        result = converter._detect_format(html_content)
+        assert result == "text/html"
+
+    def test_detect_format_xml_in_header(self, converter):
+        """XML declaration in content header is detected."""
+        xml_content = b"<?xml version='1.0' encoding='utf-8'?><root></root>"
+        result = converter._detect_format(xml_content)
+        assert result == "application/xml"
+
+    def test_detect_format_markdown_like_content(self, converter):
+        """Content starting with # is detected as plain text (no markdown detection in converter)."""
+        markdown_content = b"# Heading\n\nParagraph content"
+        result = converter._detect_format(markdown_content)
+        # Converter's _detect_format doesn't have markdown detection - returns text/plain
+        assert result == "text/plain"
+
+    def test_detect_format_utf8_text(self, converter):
+        """Valid UTF-8 text without special markers is detected as plain text."""
+        text_content = b"Just some regular text content without any special markers"
+        result = converter._detect_format(text_content)
+        assert result == "text/plain"

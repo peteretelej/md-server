@@ -161,6 +161,103 @@ class TestRemoteMDConverter:
             assert "Authorization" in converter._client.headers
             assert converter._client.headers["Authorization"] == "Bearer test-key"
 
+    # --- URL Validation Tests ---
+
+    @pytest.mark.asyncio
+    async def test_convert_url_empty_raises(self, remote_converter):
+        with pytest.raises(ValueError, match="URL cannot be empty"):
+            await remote_converter.convert_url("")
+
+    @pytest.mark.asyncio
+    async def test_convert_url_whitespace_raises(self, remote_converter):
+        with pytest.raises(ValueError, match="URL cannot be empty"):
+            await remote_converter.convert_url("   ")
+
+    @pytest.mark.asyncio
+    async def test_convert_url_invalid_scheme_raises(self, remote_converter):
+        with pytest.raises(ValueError, match="must start with http"):
+            await remote_converter.convert_url("ftp://example.com")
+
+    # --- raw_markdown Tests ---
+
+    @pytest.mark.asyncio
+    async def test_convert_url_raw_markdown(self, remote_converter):
+        mock_response = Mock()
+        mock_response.text = "# Raw Content"
+        mock_response.raise_for_status = Mock()
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            result = await remote_converter.convert_url(
+                "https://example.com", raw_markdown=True
+            )
+            assert result == "# Raw Content"
+            assert isinstance(result, str)
+
+    @pytest.mark.asyncio
+    async def test_convert_content_raw_markdown(self, remote_converter):
+        mock_response = Mock()
+        mock_response.text = "# Raw Content"
+        mock_response.raise_for_status = Mock()
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            result = await remote_converter.convert_content(b"test", raw_markdown=True)
+            assert result == "# Raw Content"
+            assert isinstance(result, str)
+
+    # --- convert_text Method Tests ---
+
+    @pytest.mark.asyncio
+    async def test_convert_text_success(self, remote_converter):
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "success": True,
+            "markdown": "# Text Content",
+            "metadata": {},
+        }
+        mock_response.raise_for_status = Mock()
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            result = await remote_converter.convert_text("Hello World")
+            assert result.success is True
+            assert result.markdown == "# Text Content"
+
+    @pytest.mark.asyncio
+    async def test_convert_text_empty_raises(self, remote_converter):
+        with pytest.raises(ValueError, match="Text cannot be empty"):
+            await remote_converter.convert_text("")
+
+    @pytest.mark.asyncio
+    async def test_convert_text_raw_markdown(self, remote_converter):
+        mock_response = Mock()
+        mock_response.text = "# Raw Text"
+        mock_response.raise_for_status = Mock()
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            result = await remote_converter.convert_text("Hello", raw_markdown=True)
+            assert result == "# Raw Text"
+            assert isinstance(result, str)
+
+    def test_convert_text_sync(self, remote_converter):
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "success": True,
+            "markdown": "# Sync Text",
+            "metadata": {},
+        }
+        mock_response.raise_for_status = Mock()
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            result = remote_converter.convert_text_sync("Hello")
+            assert result.success is True
+            assert result.markdown == "# Sync Text"
+
+    # --- Content Validation Tests ---
+
+    @pytest.mark.asyncio
+    async def test_convert_content_empty_raises(self, remote_converter):
+        with pytest.raises(ValueError, match="Content cannot be empty"):
+            await remote_converter.convert_content(b"")
+
 
 class TestRemoteMDConverterTimeout:
     """Test timeout handling in remote converter"""

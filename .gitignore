@@ -15,5 +15,6 @@ _temp/
 .coverage.*
 coverage.xml
 htmlcov/
+coverage.json
 
 .env

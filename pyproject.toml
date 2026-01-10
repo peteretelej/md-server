@@ -85,6 +85,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
+source = ["src/md_server"]
 omit = ["tests/*", "src/md_server/__main__.py"]
 branch = true
 

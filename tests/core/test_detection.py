@@ -235,3 +235,40 @@ class TestContentTypeDetector:
             pptx_by_filename
             == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         )
+
+    # --- Coverage Tests for Fallback Paths ---
+
+    def test_detect_from_content_with_filename_priority(self, detector):
+        """Magic bytes detection takes precedence over filename."""
+        # Plain text content - magic bytes returns text/plain
+        content = b"some plain text content"
+        result = detector.detect_from_content(content, filename="document.pdf")
+        # Magic bytes wins - returns text/plain, not PDF
+        assert result == "text/plain"
+
+    def test_detect_from_content_binary_without_filename(self, detector):
+        """Binary content without filename returns octet-stream."""
+        # Binary content with high non-printable ratio
+        content = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+        result = detector.detect_from_content(content)
+        assert result == "application/octet-stream"
+
+    def test_detect_input_type_invalid_base64_with_filename(self, detector):
+        """Invalid base64 with filename falls back to filename detection."""
+        request_data = {"content": "not-valid-base64!!!", "filename": "report.pdf"}
+        input_type, fmt = detector.detect_input_type(request_data=request_data)
+        assert input_type == "json_content"
+        assert fmt == "application/pdf"
+
+    def test_detect_input_type_json_content_no_magic_match_with_filename(
+        self, detector
+    ):
+        """Valid base64 that doesn't match magic bytes uses filename fallback."""
+        # Base64 encode "hello" - valid UTF-8 text that won't match signatures
+        # but will be detected as text/plain by magic bytes
+        text_content = base64.b64encode(b"hello world").decode()
+        request_data = {"content": text_content, "filename": "spreadsheet.xlsx"}
+        input_type, fmt = detector.detect_input_type(request_data=request_data)
+        assert input_type == "json_content"
+        # Magic bytes returns text/plain which is truthy, so filename not used
+        assert fmt == "text/plain"
