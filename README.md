@@ -1,6 +1,6 @@
 # md-server
 
-**Convert any document, webpage, or media file to markdown via HTTP API.**
+**Convert any document, webpage, or media file to markdown. Works as an HTTP API or directly with AI tools via MCP.**
 
 [![CI](https://github.com/peteretelej/md-server/actions/workflows/ci.yml/badge.svg)](https://github.com/peteretelej/md-server/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/peteretelej/md-server/badge.svg?branch=main)](https://coveralls.io/github/peteretelej/md-server?branch=main)
@@ -9,7 +9,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/peteretelej/md-server/pkgs/container/md-server)
 
-md-server provides a HTTP API that accepts files, URLs, or raw content converts it into markdown. It automatically detects input types, handles everything from PDFs and Office documents, Youtube videos, images, to web pages with JavaScript rendering, and requires zero configuration to get started. Under the hood, it uses Microsoft's MarkItDown for document conversion and Crawl4AI for intelligent web scraping.
+md-server converts files, URLs, or raw content into markdown. It automatically detects input types, handles everything from PDFs and Office documents, YouTube videos, images, to web pages with JavaScript rendering, and requires zero configuration to get started.
+
+**Two ways to use it:**
+- **HTTP API** — Run as a server for any application
+- **MCP Server** — Direct integration with AI tools (Claude Desktop, Cursor, custom agents)
+
+Under the hood, it uses Microsoft's MarkItDown for document conversion and Crawl4AI for intelligent web scraping.
 
 ## Quick Start
 
@@ -29,6 +35,45 @@ curl -X POST localhost:8080/convert \
 curl -X POST localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"text": "<h1>Title</h1><p>Content</p>", "mime_type": "text/html"}'
+```
+
+## AI Integration (MCP)
+
+md-server works directly with AI tools via [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This lets Claude Desktop, Cursor, and other AI tools convert documents and read web pages without any HTTP setup.
+
+### Claude Desktop / Cursor
+
+Add to your MCP configuration:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Linux:** `~/.config/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "md-server": {
+      "command": "uvx",
+      "args": ["md-server[mcp]", "--mcp-stdio"]
+    }
+  }
+}
+```
+
+Once configured, your AI can convert documents directly:
+
+> "Read the Python asyncio documentation and summarize it"
+> "What's in this PDF?" *(with file attached)*
+> "Convert this webpage to markdown: https://example.com"
+
+### MCP Modes
+
+```bash
+# For local AI tools (Claude Desktop, Cursor)
+uvx md-server[mcp] --mcp-stdio
+
+# For network-based AI agents
+uvx md-server[mcp] --mcp-sse --port 9000
 ```
 
 ## Installation

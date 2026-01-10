@@ -40,6 +40,9 @@ dependencies = [
     "langdetect>=1.0.9",
 ]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.0.0"]
+
 [project.urls]
 Homepage = "https://github.com/peteretelej/md-server"
 Repository = "https://github.com/peteretelej/md-server.git"
