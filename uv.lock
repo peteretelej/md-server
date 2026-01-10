@@ -1722,15 +1722,11 @@ dependencies = [
     { name = "langdetect" },
     { name = "litestar", extra = ["standard"] },
     { name = "markitdown", extra = ["all"] },
+    { name = "mcp" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "tiktoken" },
-]
-
-[package.optional-dependencies]
-mcp = [
-    { name = "mcp" },
 ]
 
 [package.dev-dependencies]
@@ -1750,13 +1746,12 @@ requires-dist = [
     { name = "langdetect", specifier = ">=1.0.9" },
     { name = "litestar", extras = ["standard"], specifier = ">=2.0.0" },
     { name = "markitdown", extras = ["all"], specifier = ">=0.0.1" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
+    { name = "mcp", specifier = ">=1.0.0" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "tiktoken", specifier = ">=0.5.0" },
 ]
-provides-extras = ["mcp"]
 
 [package.metadata.requires-dev]
 dev = [
