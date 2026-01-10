@@ -163,7 +163,9 @@ Environment variables:
 ## Documentation Structure
 
 - `README.md` - Concise intro, quick start, basic examples
-- `docs/API.md` - Consolidated API reference (HTTP, SDK, MCP)
+- `docs/API.md` - HTTP API reference
 - `docs/sdk/README.md` - SDK usage guide, examples, patterns
-- `docs/mcp/README.md` - MCP integration guide (future)
+- `docs/mcp-guide.md` - MCP integration guide
+- `docs/configuration.md` - Environment variables reference
+- `docs/troubleshooting.md` - FAQ and common issues
 - `docs/design.md` - Architecture documentation

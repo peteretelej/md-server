@@ -1,5 +1,18 @@
 # Contributing to md-server
 
+## Table of Contents
+
+- [Development Setup](#development-setup)
+- [Running Locally](#running-locally)
+- [Testing](#testing)
+- [Code Quality](#code-quality)
+- [Development Workflow](#development-workflow)
+- [Enhanced URL Conversion](#enhanced-url-conversion-optional)
+- [Docker](#docker)
+- [Publishing New Version](#publishing-new-version)
+- [Project Structure](#project-structure)
+- [Debugging](#debugging)
+
 ## Development Setup
 
 ### Prerequisites
@@ -191,4 +204,5 @@ MD_SERVER_TIMEOUT_SECONDS=60 uv run python -m md_server
 
 - [GitHub Issues](https://github.com/peteretelej/md-server/issues)
 - [API Documentation](API.md)
+- [Configuration Reference](configuration.md)
 - [Design Document](design.md)

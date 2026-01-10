@@ -1,4 +1,19 @@
-# API Documentation
+# API Reference
+
+HTTP API documentation for md-server.
+
+## Table of Contents
+
+- [Base URL](#base-url)
+- [Endpoints](#endpoints)
+  - [POST /convert](#post-convert)
+  - [GET /formats](#get-formats)
+  - [GET /health](#get-health)
+- [Content Negotiation](#content-negotiation)
+- [Options](#options)
+- [Error Codes](#error-codes)
+- [Security](#security)
+- [Examples](#examples)
 
 ## Base URL
 
@@ -6,7 +21,9 @@
 http://localhost:8080
 ```
 
-This can be modified with the `--host` and `--port` options when running the server or by setting the environment variables `MD_SERVER_HOST` and `MD_SERVER_PORT`. Please use HTTPS in production (Consider [Caddy](https://caddyserver.com/) for easy HTTPS setup) and use `MD_SERVER_API_KEY` to support API key auth.
+Configure with `--host` and `--port` options or environment variables `MD_SERVER_HOST` and `MD_SERVER_PORT`. Use HTTPS in production (consider [Caddy](https://caddyserver.com/) for easy HTTPS setup) and set `MD_SERVER_API_KEY` for authentication.
+
+See [Configuration](configuration.md) for all environment variables.
 
 ## Endpoints
 
@@ -17,7 +34,6 @@ Single endpoint that handles all conversion types. Input type is detected automa
 #### Input Detection
 
 Detection order:
-
 1. Content-Type header
 2. Request body structure (JSON fields)
 3. Magic bytes (binary data)
@@ -68,7 +84,7 @@ curl -X POST http://localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"text": "<h1>Title</h1><p>Content</p>", "mime_type": "text/html"}'
 
-# XML text conversion  
+# XML text conversion
 curl -X POST http://localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"text": "<?xml version=\"1.0\"?><root><item>Data</item></root>", "mime_type": "text/xml"}'
@@ -79,19 +95,21 @@ curl -X POST http://localhost:8080/convert \
 ```json
 {
   "url": "string",
-  "content": "string", // base64
+  "content": "string",
   "text": "string",
-  "mime_type": "string", // optional, for text field
+  "mime_type": "string",
   "filename": "string",
   "source_format": "string",
   "options": {
     "js_rendering": false,
     "timeout": 30,
     "extract_images": false,
-    "preserve_formatting": false,
+    "preserve_formatting": true,
     "ocr_enabled": false,
     "max_length": null,
-    "clean_markdown": false
+    "clean_markdown": false,
+    "include_frontmatter": false,
+    "output_format": null
   }
 }
 ```
@@ -110,11 +128,28 @@ curl -X POST http://localhost:8080/convert \
     "markdown_size": 8192,
     "conversion_time_ms": 456,
     "detected_format": "application/pdf",
-    "warnings": []
+    "warnings": [],
+    "title": "Document Title",
+    "estimated_tokens": 2048,
+    "detected_language": "en"
   },
   "request_id": "req_550e8400-e29b-41d4-a716-446655440000"
 }
 ```
+
+##### Metadata Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `source_type` | string | Type of source content (pdf, html, etc.) |
+| `source_size` | int | Size of source content in bytes |
+| `markdown_size` | int | Size of converted markdown in bytes |
+| `conversion_time_ms` | int | Time taken for conversion in milliseconds |
+| `detected_format` | string | Detected format/MIME type |
+| `warnings` | array | Conversion warnings |
+| `title` | string | Extracted document title (if available) |
+| `estimated_tokens` | int | Estimated token count for LLM usage |
+| `detected_language` | string | ISO 639-1 language code (e.g., "en", "es") |
 
 ##### Error (4xx/5xx)
 
@@ -133,7 +168,7 @@ curl -X POST http://localhost:8080/convert \
 
 ### GET /formats
 
-Returns supported formats.
+Returns supported formats and capabilities.
 
 ```bash
 curl http://localhost:8080/formats
@@ -159,6 +194,10 @@ curl http://localhost:8080/formats
       "features": ["extract_images", "preserve_formatting"],
       "max_size_mb": 25
     }
+  },
+  "supported_formats": ["pdf", "docx", "..."],
+  "capabilities": {
+    "browser_available": true
   }
 }
 ```
@@ -174,82 +213,162 @@ curl http://localhost:8080/health
 ```json
 {
   "status": "healthy",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "uptime_seconds": 3600,
+  "conversions_last_hour": 42
 }
+```
+
+## Content Negotiation
+
+md-server supports two response formats: JSON (default) and raw markdown.
+
+### JSON Response (Default)
+
+Standard JSON response with metadata:
+
+```bash
+curl -X POST localhost:8080/convert --data-binary @document.pdf
+```
+
+### Raw Markdown Response
+
+Get raw markdown with metadata in HTTP headers. Use either:
+
+**Accept header:**
+
+```bash
+curl -X POST localhost:8080/convert \
+  -H "Accept: text/markdown" \
+  --data-binary @document.pdf
+```
+
+**output_format option:**
+
+```bash
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "options": {"output_format": "markdown"}}'
+```
+
+#### Response Headers
+
+When using raw markdown output, metadata is returned in HTTP headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-Request-Id` | Unique request identifier |
+| `X-Source-Type` | Source content type |
+| `X-Source-Size` | Source size in bytes |
+| `X-Markdown-Size` | Output size in bytes |
+| `X-Conversion-Time-Ms` | Conversion time in milliseconds |
+| `X-Detected-Format` | Detected MIME type |
+| `X-Estimated-Tokens` | Token count estimate (if available) |
+
+#### Piping Raw Markdown
+
+Raw markdown mode is useful for CLI pipelines:
+
+```bash
+# Save directly to file
+curl -s -X POST localhost:8080/convert \
+  -H "Accept: text/markdown" \
+  --data-binary @document.pdf > output.md
+
+# Pipe to other tools
+curl -s -X POST localhost:8080/convert \
+  -H "Accept: text/markdown" \
+  -d '{"url": "https://example.com"}' | grep "keyword"
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `js_rendering` | bool | false | Use headless browser for JavaScript sites |
+| `timeout` | int | 30 | Timeout seconds (max: 120) |
+| `extract_images` | bool | false | Extract embedded images |
+| `preserve_formatting` | bool | true | Keep complex formatting |
+| `ocr_enabled` | bool | false | OCR for images/scanned PDFs |
+| `max_length` | int | null | Truncate output |
+| `clean_markdown` | bool | false | Normalize markdown |
+| `include_frontmatter` | bool | false | Prepend YAML frontmatter with metadata |
+| `output_format` | string | null | Response format: "json" or "markdown" |
+
+### include_frontmatter
+
+When enabled, prepends YAML frontmatter to the markdown output:
+
+```bash
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "options": {"include_frontmatter": true}}'
+```
+
+Output:
+
+```markdown
+---
+title: "Example Page"
+source_type: html
+estimated_tokens: 1024
+detected_language: en
+---
+
+# Example Page
+
+Content here...
 ```
 
 ## Error Codes
 
-| Code                 | Status | Description           |
-| -------------------- | ------ | --------------------- |
-| `UNSUPPORTED_FORMAT` | 400    | Format not supported  |
-| `FILE_TOO_LARGE`     | 413    | Exceeds size limit    |
-| `INVALID_URL`        | 400    | URL malformed/blocked |
-| `INVALID_INPUT`      | 400    | Invalid MIME type/input |
-| `FETCH_FAILED`       | 502    | URL fetch failed      |
-| `CONVERSION_FAILED`  | 500    | Conversion error      |
-| `RATE_LIMITED`       | 429    | Too many requests     |
-| `INVALID_CONTENT`    | 400    | Validation failed     |
-| `TIMEOUT`            | 504    | Operation timeout     |
-
-## Options
-
-| Option                | Type | Default | Description                |
-| --------------------- | ---- | ------- | -------------------------- |
-| `js_rendering`        | bool | false   | Use headless browser       |
-| `timeout`             | int  | 30      | Timeout seconds (max: 120) |
-| `extract_images`      | bool | false   | Extract embedded images    |
-| `preserve_formatting` | bool | false   | Keep complex formatting    |
-| `ocr_enabled`         | bool | false   | OCR for images/PDFs        |
-| `max_length`          | int  | null    | Truncate output            |
-| `clean_markdown`      | bool | false   | Normalize markdown         |
+| Code | Status | Description |
+|------|--------|-------------|
+| `UNSUPPORTED_FORMAT` | 400 | Format not supported |
+| `FILE_TOO_LARGE` | 413 | Exceeds size limit |
+| `INVALID_URL` | 400 | URL malformed/blocked |
+| `INVALID_INPUT` | 400 | Invalid MIME type/input |
+| `FETCH_FAILED` | 502 | URL fetch failed |
+| `CONVERSION_FAILED` | 500 | Conversion error |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `INVALID_CONTENT` | 400 | Validation failed |
+| `TIMEOUT` | 504 | Operation timeout |
+| `SSRF_BLOCKED` | 400 | URL targets blocked resource |
+| `UNAUTHORIZED` | 401 | Missing or invalid API key |
 
 ## Security
 
 ### API Key Authentication
 
-To secure your API, set the `MD_SERVER_API_KEY` environment variable:
+Set `MD_SERVER_API_KEY` to require authentication:
 
 ```bash
-# Set API key
-export MD_SERVER_API_KEY="your-secret-api-key-here"
-
-# Start server
+export MD_SERVER_API_KEY="your-secret-api-key"
 uvx md-server
 ```
 
-When configured, all requests (except `/healthz`) require the `Authorization` header:
+Requests must include the `Authorization` header:
 
 ```bash
-# Authenticated request
 curl -X POST localhost:8080/convert \
-  -H "Authorization: Bearer your-secret-api-key-here" \
+  -H "Authorization: Bearer your-secret-api-key" \
   --data-binary @document.pdf
-
-# Unauthenticated requests will return 401
-curl -X POST localhost:8080/convert --data-binary @document.pdf
-# {"success": false, "error": {"code": "UNAUTHORIZED", "message": "Missing Authorization header"}}
 ```
-
-Use HTTPS in production to protect the key in transit.
 
 ### SSRF Protection
 
-- Blocked: Private IPs (10.x, 192.168.x, 127.x), AWS metadata (169.254.169.254)
-- Allowed schemes: https, http
-- Max redirects: 5
-- Max size: 50MB
+By default, md-server blocks:
+- Private IPs (10.x, 192.168.x, 172.16.x)
+- Localhost (127.x, ::1)
+- Cloud metadata (169.254.169.254)
+
+See [Configuration](configuration.md) for SSRF settings.
 
 ### File Validation
 
 - Magic bytes verification
 - Size limits per format
 - Path traversal prevention
-
-## Rate Limiting
-
-- 100 requests/hour per IP
-- Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
 
 ## Examples
 
@@ -265,13 +384,28 @@ curl -X POST localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com"}'
 
-# With options
+# With JavaScript rendering
 curl -X POST localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","options":{"js_rendering":true}}'
 
-# Pipe input
-cat document.html | curl -X POST localhost:8080/convert \
+# With OCR
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"content":"base64...","filename":"scan.pdf","options":{"ocr_enabled":true}}'
+
+# Raw markdown output
+curl -X POST localhost:8080/convert \
+  -H "Accept: text/markdown" \
+  --data-binary @document.pdf
+
+# With frontmatter
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com","options":{"include_frontmatter":true}}'
+
+# Pipe from stdin
+echo "<h1>Hello</h1>" | curl -X POST localhost:8080/convert \
   --data-binary @- -H "Content-Type: text/html"
 
 # Save output
@@ -281,291 +415,9 @@ curl -X POST localhost:8080/convert --data-binary @doc.pdf \
 
 </details>
 
-# Python SDK
+## See Also
 
-## Installation
-
-The SDK is included with md-server:
-
-```bash
-pip install md-server[sdk]
-```
-
-## Local Usage
-
-```python
-from md_server.sdk import MDConverter
-
-# Create converter
-converter = MDConverter()
-
-# Convert file
-result = await converter.convert_file("document.pdf")
-print(result.markdown)
-
-# Convert URL
-result = await converter.convert_url("https://example.com")
-print(result.markdown)
-
-# Convert binary content
-with open("file.pdf", "rb") as f:
-    result = await converter.convert_content(f.read(), filename="file.pdf")
-
-# Convert text with MIME type
-result = await converter.convert_text("<h1>HTML</h1>", mime_type="text/html")
-```
-
-## Remote Usage
-
-```python
-from md_server.sdk import RemoteMDConverter
-
-# Connect to remote md-server
-async with RemoteMDConverter(
-    endpoint="https://api.example.com",
-    api_key="your-api-key"
-) as client:
-    result = await client.convert_file("document.pdf")
-    print(result.markdown)
-```
-
-## Sync API
-
-```python
-from md_server.sdk import MDConverter, RemoteMDConverter
-
-# Local converter
-converter = MDConverter()
-result = converter.convert_file_sync("document.pdf")
-result = converter.convert_url_sync("https://example.com")
-
-# Remote converter
-client = RemoteMDConverter("https://api.example.com")
-result = client.convert_file_sync("document.pdf")
-```
-
-## Configuration
-
-```python
-# Local converter
-converter = MDConverter(
-    ocr_enabled=True,
-    js_rendering=True,
-    timeout=60,
-    max_file_size_mb=100,
-    extract_images=True,
-    preserve_formatting=True
-)
-
-# Remote converter
-client = RemoteMDConverter(
-    endpoint="https://api.example.com",
-    api_key="your-api-key",
-    timeout=30
-)
-```
-
-## Models
-
-### ConversionResult
-
-```python
-@dataclass
-class ConversionResult:
-    success: bool
-    markdown: str
-    metadata: ConversionMetadata
-    request_id: str
-```
-
-### ConversionMetadata
-
-```python
-@dataclass
-class ConversionMetadata:
-    source_type: str
-    source_size: int
-    markdown_size: int
-    conversion_time_ms: int
-    detected_format: str
-    warnings: List[str]
-```
-
-## Exception Handling
-
-The SDK uses standard Python exceptions:
-
-```python
-from md_server.sdk import MDConverter
-
-converter = MDConverter()
-
-try:
-    result = await converter.convert_file("document.pdf")
-except FileNotFoundError:
-    print("File not found")
-except ValueError as e:
-    print(f"Invalid input: {e}")
-except OSError as e:
-    print(f"File system error: {e}")
-except Exception as e:
-    print(f"Conversion failed: {e}")
-```
-
-<details>
-<summary>Legacy HTTP Client Example</summary>
-
-```python
-import requests
-
-class MDServerClient:
-    def __init__(self, base_url="http://localhost:8080"):
-        self.base_url = base_url
-
-    def convert_file(self, file_path, options=None):
-        with open(file_path, 'rb') as f:
-            response = requests.post(
-                f"{self.base_url}/convert",
-                data=f.read()
-            )
-        return response.json()
-
-    def convert_url(self, url, options=None):
-        payload = {"url": url}
-        if options:
-            payload["options"] = options
-        response = requests.post(
-            f"{self.base_url}/convert",
-            json=payload
-        )
-        return response.json()
-
-# Usage
-client = MDServerClient()
-result = client.convert_file("document.pdf")
-print(result["markdown"])
-```
-
-</details>
-
-<details>
-<summary>JavaScript SDK</summary>
-
-```javascript
-class MDServerClient {
-  constructor(baseUrl = "http://localhost:8080") {
-    this.baseUrl = baseUrl;
-  }
-
-  async convertFile(file, options) {
-    const formData = new FormData();
-    formData.append("file", file);
-    if (options) {
-      formData.append("options", JSON.stringify(options));
-    }
-    const response = await fetch(`${this.baseUrl}/convert`, {
-      method: "POST",
-      body: formData,
-    });
-    return response.json();
-  }
-
-  async convertUrl(url, options) {
-    const response = await fetch(`${this.baseUrl}/convert`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, options }),
-    });
-    return response.json();
-  }
-}
-```
-
-</details>
-
-<details>
-<summary>Go SDK</summary>
-
-```go
-package main
-
-import (
-    "bytes"
-    "encoding/json"
-    "net/http"
-)
-
-type MDServerClient struct {
-    BaseURL string
-}
-
-type ConvertOptions struct {
-    JSRendering    bool `json:"js_rendering,omitempty"`
-    ExtractImages  bool `json:"extract_images,omitempty"`
-}
-
-func (c *MDServerClient) ConvertURL(url string, opts *ConvertOptions) (map[string]interface{}, error) {
-    payload := map[string]interface{}{
-        "url": url,
-        "options": opts,
-    }
-
-    body, _ := json.Marshal(payload)
-    resp, err := http.Post(
-        c.BaseURL+"/convert",
-        "application/json",
-        bytes.NewReader(body),
-    )
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    var result map[string]interface{}
-    json.NewDecoder(resp.Body).Decode(&result)
-    return result, nil
-}
-```
-
-</details>
-
-<details>
-<summary>Ruby SDK</summary>
-
-```ruby
-require 'net/http'
-require 'json'
-
-class MDServerClient
-  def initialize(base_url = 'http://localhost:8080')
-    @base_url = base_url
-  end
-
-  def convert_file(file_path, options = nil)
-    uri = URI("#{@base_url}/convert")
-    request = Net::HTTP::Post.new(uri)
-    request.body = File.read(file_path, mode: 'rb')
-
-    response = Net::HTTP.start(uri.hostname, uri.port) do |http|
-      http.request(request)
-    end
-
-    JSON.parse(response.body)
-  end
-
-  def convert_url(url, options = nil)
-    uri = URI("#{@base_url}/convert")
-    request = Net::HTTP::Post.new(uri)
-    request['Content-Type'] = 'application/json'
-    request.body = { url: url, options: options }.to_json
-
-    response = Net::HTTP.start(uri.hostname, uri.port) do |http|
-      http.request(request)
-    end
-
-    JSON.parse(response.body)
-  end
-end
-```
-
-</details>
+- [Python SDK](sdk/README.md) - Library usage for Python applications
+- [MCP Guide](mcp-guide.md) - AI tool integration
+- [Configuration](configuration.md) - Environment variables
+- [Troubleshooting](troubleshooting.md) - Common issues

@@ -76,6 +76,8 @@ uvx md-server[mcp] --mcp-stdio
 uvx md-server[mcp] --mcp-sse --port 9000
 ```
 
+See [MCP Integration Guide](docs/mcp-guide.md) for complete setup instructions and troubleshooting.
+
 ## Installation
 
 ### Using uvx (Recommended)
@@ -334,6 +336,16 @@ Errors include actionable information:
   "request_id": "req_550e8400-e29b-41d4-a716-446655440000"
 }
 ```
+
+## Documentation
+
+Full documentation is available in the [docs](docs/) directory:
+
+- [API Reference](docs/API.md) - HTTP endpoints, options, and responses
+- [MCP Integration](docs/mcp-guide.md) - Claude Desktop, Cursor, and AI tool setup
+- [Python SDK](docs/sdk/README.md) - Library usage for Python applications
+- [Configuration](docs/configuration.md) - Environment variables reference
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
 
 ## Development
 

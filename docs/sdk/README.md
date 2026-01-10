@@ -2,6 +2,17 @@
 
 Python SDK for document to markdown conversion using md-server.
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Usage Patterns](#usage-patterns)
+- [Synchronous API](#synchronous-api)
+- [Error Handling](#error-handling)
+- [Best Practices](#best-practices)
+- [Integration Examples](#integration-examples)
+
 ## Installation
 
 ```bash
@@ -407,6 +418,8 @@ async def convert_endpoint(file: UploadFile):
 
 ## See Also
 
-- [API Reference](../API.md) - Complete HTTP and SDK API documentation
-- [Examples](../../examples/) - Practical usage examples
+- [API Reference](../API.md) - HTTP API documentation
+- [MCP Guide](../mcp-guide.md) - AI tool integration
+- [Configuration](../configuration.md) - Environment variables
+- [Troubleshooting](../troubleshooting.md) - Common issues
 - [Main README](../../README.md) - Project overview and quick start
