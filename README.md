@@ -39,7 +39,7 @@ curl -X POST localhost:8080/convert \
 
 ## AI Integration (MCP)
 
-md-server works directly with AI tools via [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This lets Claude Desktop, Cursor, and other AI tools convert documents and read web pages without any HTTP setup.
+md-server works directly with AI tools via [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This lets Claude Desktop, Cursor, and other AI tools read documents and web pages without any HTTP setup.
 
 ### Claude Desktop / Cursor
 
@@ -60,11 +60,17 @@ Add to your MCP configuration:
 }
 ```
 
-Once configured, your AI can convert documents directly:
+Once configured, your AI gets two tools:
+
+- **`read_url`** — Fetch and read web pages, articles, documentation, online PDFs
+- **`read_file`** — Read uploaded documents with auto-OCR for images
+
+Example prompts:
 
 > "Read the Python asyncio documentation and summarize it"
 > "What's in this PDF?" *(with file attached)*
-> "Convert this webpage to markdown: https://example.com"
+> "Read this article: https://example.com/news"
+> "Extract text from this screenshot"
 
 ### MCP Modes
 

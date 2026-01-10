@@ -1,6 +1,9 @@
+"""Tests for MCP server functionality."""
+
 import base64
+import json
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, AsyncMock, MagicMock
 
 from md_server.mcp.server import call_tool, list_tools, get_converter
 
@@ -9,59 +12,107 @@ from md_server.mcp.server import call_tool, list_tools, get_converter
 class TestMCPServer:
     """Test MCP server functionality."""
 
-    async def test_list_tools(self):
+    @pytest.mark.asyncio
+    async def test_list_tools_returns_two(self):
+        """list_tools should return read_url and read_file tools."""
         tools = await list_tools()
-        assert len(tools) == 1
-        assert tools[0].name == "convert"
+        assert len(tools) == 2
+        names = [t.name for t in tools]
+        assert "read_url" in names
+        assert "read_file" in names
 
-    async def test_convert_text(self):
-        result = await call_tool("convert", {"text": "# Hello World"})
+    @pytest.mark.asyncio
+    async def test_read_url_success(self):
+        """read_url should return JSON response on success."""
+        with patch("md_server.mcp.server.get_converter") as mock_get:
+            mock_conv = MagicMock()
+            mock_conv.timeout = 60
+            mock_conv.convert_url = AsyncMock(
+                return_value=MagicMock(
+                    markdown="# Hello World with more than five words",
+                    metadata=MagicMock(title="Hello World", detected_language="en"),
+                )
+            )
+            mock_get.return_value = mock_conv
+
+            result = await call_tool("read_url", {"url": "https://example.com"})
+
+            assert len(result) == 1
+            assert result[0].type == "text"
+            data = json.loads(result[0].text)
+            assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_read_file_success(self):
+        """read_file should return JSON response on success."""
+        with patch("md_server.mcp.server.get_converter") as mock_get:
+            mock_metadata = MagicMock()
+            mock_metadata.title = "Doc"
+            mock_metadata.detected_language = "en"
+            mock_metadata.detected_format = "application/pdf"
+            mock_metadata.get = MagicMock(return_value=None)
+
+            mock_conv = MagicMock()
+            mock_conv.timeout = 60
+            mock_conv.max_file_size_mb = 50
+            mock_conv.convert_content = AsyncMock(
+                return_value=MagicMock(
+                    markdown="# Markdown Content with more than five words here",
+                    metadata=mock_metadata,
+                )
+            )
+            mock_get.return_value = mock_conv
+
+            content = base64.b64encode(b"fake pdf content").decode()
+            result = await call_tool(
+                "read_file", {"content": content, "filename": "test.pdf"}
+            )
+
+            assert len(result) == 1
+            data = json.loads(result[0].text)
+            assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_returns_error(self):
+        """Unknown tool should return error response, not raise."""
+        result = await call_tool("unknown_tool", {})
+
         assert len(result) == 1
-        assert result[0].type == "text"
-        assert "Hello World" in result[0].text
+        data = json.loads(result[0].text)
+        assert data["success"] is False
+        assert data["error"]["code"] == "UNKNOWN_TOOL"
 
-    async def test_convert_html_text(self):
-        result = await call_tool("convert", {"text": "<h1>Title</h1><p>Content</p>"})
+    @pytest.mark.asyncio
+    async def test_missing_url_returns_error(self):
+        """read_url without url should return error."""
+        result = await call_tool("read_url", {})
+
         assert len(result) == 1
-        assert "Title" in result[0].text
+        data = json.loads(result[0].text)
+        assert data["success"] is False
+        assert data["error"]["code"] == "INVALID_INPUT"
 
-    async def test_convert_base64_content(self):
-        content = base64.b64encode(b"# Markdown Content").decode()
-        result = await call_tool("convert", {"content": content, "filename": "test.md"})
+    @pytest.mark.asyncio
+    async def test_missing_content_returns_error(self):
+        """read_file without content should return error."""
+        result = await call_tool("read_file", {"filename": "test.pdf"})
+
         assert len(result) == 1
-        assert "Markdown Content" in result[0].text
+        data = json.loads(result[0].text)
+        assert data["success"] is False
+        assert data["error"]["code"] == "INVALID_INPUT"
 
-    async def test_unknown_tool_raises(self):
-        with pytest.raises(ValueError, match="Unknown tool"):
-            await call_tool("unknown_tool", {})
-
-    async def test_missing_input_returns_error(self):
-        result = await call_tool("convert", {})
-        assert len(result) == 1
-        assert "Error" in result[0].text
-
-    async def test_error_returns_text_content(self):
-        result = await call_tool("convert", {"content": "not-valid-base64!!!"})
-        assert len(result) == 1
-        assert "Error" in result[0].text
-
-    async def test_include_frontmatter_option(self):
+    @pytest.mark.asyncio
+    async def test_invalid_base64_returns_error(self):
+        """read_file with invalid base64 should return error."""
         result = await call_tool(
-            "convert", {"text": "# Test Document", "include_frontmatter": True}
+            "read_file", {"content": "not-valid-base64!!!", "filename": "test.pdf"}
         )
+
         assert len(result) == 1
-        assert "---" in result[0].text or "Test Document" in result[0].text
-
-
-@pytest.mark.integration
-class TestMCPIntegration:
-    """Integration tests for MCP server."""
-
-    @pytest.mark.slow
-    async def test_convert_public_url(self):
-        result = await call_tool("convert", {"url": "https://example.com"})
-        assert len(result) == 1
-        assert "Example Domain" in result[0].text
+        data = json.loads(result[0].text)
+        assert data["success"] is False
+        assert data["error"]["code"] == "INVALID_INPUT"
 
 
 @pytest.mark.unit
@@ -74,7 +125,6 @@ class TestMCPTransports:
 
         mock_uvicorn = Mock()
         with patch.dict(sys.modules, {"uvicorn": mock_uvicorn}):
-            # Need to reimport to get fresh module with mocked uvicorn
             import importlib
             import md_server.mcp.server as server_module
 
@@ -84,7 +134,6 @@ class TestMCPTransports:
 
             mock_uvicorn.run.assert_called_once()
             app = mock_uvicorn.run.call_args[0][0]
-            # Extract route paths - some routes may be Route objects, others may be functions
             route_paths = []
             for r in app.routes:
                 if hasattr(r, "path"):
@@ -125,7 +174,6 @@ class TestMCPTransports:
         """Verify health endpoint returns correct response format."""
         from starlette.responses import JSONResponse
 
-        # Test the health function signature matches expected response
         async def health(request):
             return JSONResponse({"status": "healthy", "mode": "mcp-sse"})
 

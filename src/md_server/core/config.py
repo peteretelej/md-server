@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     timeout_seconds: int = 30
     url_fetch_timeout: int = 30
     conversion_timeout: int = 120
+    browser_timeout: int = Field(
+        default=90,
+        description="Timeout for browser-based operations in seconds (JS rendering)",
+    )
+    ocr_timeout: int = Field(
+        default=120,
+        description="Timeout for OCR operations in seconds",
+    )
     debug: bool = False
 
     http_proxy: Optional[str] = None

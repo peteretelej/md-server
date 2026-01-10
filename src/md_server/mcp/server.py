@@ -1,3 +1,5 @@
+"""MCP server implementation for md-server."""
+
 import asyncio
 import base64
 import logging
@@ -8,7 +10,9 @@ from mcp.types import TextContent, Tool
 
 from ..core.converter import DocumentConverter
 from ..core.config import get_settings
-from .tools import CONVERT_TOOL
+from .tools import TOOLS
+from .handlers import handle_read_url, handle_read_file
+from .errors import unknown_tool_error, invalid_input_error
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +31,7 @@ def get_converter() -> DocumentConverter:
 @server.list_tools()
 async def list_tools() -> list[Tool]:
     """Return available MCP tools."""
-    return [CONVERT_TOOL]
+    return TOOLS
 
 
 @server.call_tool()
@@ -36,52 +40,50 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     Handle MCP tool calls.
 
     Args:
-        name: Tool name (only "convert" supported)
+        name: Tool name ("read_url" or "read_file")
         arguments: Tool arguments
 
     Returns:
-        List of TextContent with conversion result
+        List of TextContent with JSON response
     """
-    if name != "convert":
-        raise ValueError(f"Unknown tool: {name}")
-
     converter = get_converter()
 
-    try:
-        js_rendering = arguments.get("js_rendering", False)
-        include_frontmatter = arguments.get("include_frontmatter", False)
-
-        if "url" in arguments:
-            result = await converter.convert_url(
-                arguments["url"],
-                js_rendering=js_rendering,
-                include_frontmatter=include_frontmatter,
-            )
-        elif "content" in arguments:
-            content = base64.b64decode(arguments["content"])
-            filename = arguments.get("filename")
-            result = await converter.convert_content(
-                content,
-                filename=filename,
-                include_frontmatter=include_frontmatter,
-            )
-        elif "text" in arguments:
-            text = arguments["text"]
-            mime_type = "text/html" if text.lstrip()[:1] == "<" else "text/plain"
-            result = await converter.convert_text(
-                text,
-                mime_type,
-                include_frontmatter=include_frontmatter,
-            )
+    if name == "read_url":
+        url = arguments.get("url")
+        if not url:
+            result = invalid_input_error("Missing required parameter: url")
         else:
-            raise ValueError("Must provide url, content, or text")
+            result = await handle_read_url(
+                converter=converter,
+                url=url,
+                render_js=arguments.get("render_js", False),
+            )
 
-        return [TextContent(type="text", text=result.markdown)]
+    elif name == "read_file":
+        content_b64 = arguments.get("content")
+        filename = arguments.get("filename")
 
-    except Exception as e:
-        logger.error("Conversion failed: %s", e)
-        error_message = f"Error: {type(e).__name__} - {str(e)}"
-        return [TextContent(type="text", text=error_message)]
+        if not content_b64:
+            result = invalid_input_error("Missing required parameter: content")
+        elif not filename:
+            result = invalid_input_error("Missing required parameter: filename")
+        else:
+            try:
+                content = base64.b64decode(content_b64)
+            except Exception:
+                result = invalid_input_error(
+                    "Invalid base64 content. Content must be base64-encoded."
+                )
+            else:
+                result = await handle_read_file(
+                    converter=converter,
+                    content=content,
+                    filename=filename,
+                )
+    else:
+        result = unknown_tool_error(name)
+
+    return [TextContent(type="text", text=result.model_dump_json())]
 
 
 def run_stdio() -> None:

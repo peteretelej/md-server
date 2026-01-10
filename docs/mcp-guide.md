@@ -1,13 +1,14 @@
 # MCP Integration Guide
 
-md-server works directly with AI tools via [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This lets Claude Desktop, Cursor, and other AI tools convert documents and read web pages without any HTTP setup.
+md-server works directly with AI tools via [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This lets Claude Desktop, Cursor, and other AI tools read documents and web pages without any HTTP setup.
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Transport Modes](#transport-modes)
-- [The Convert Tool](#the-convert-tool)
+- [Available Tools](#available-tools)
+- [Response Format](#response-format)
 - [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
 
@@ -78,6 +79,8 @@ MCP mode respects the same environment variables as the HTTP server:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MD_SERVER_CONVERSION_TIMEOUT` | 120 | Conversion timeout in seconds |
+| `MD_SERVER_BROWSER_TIMEOUT` | 90 | Browser operations timeout (JS rendering) |
+| `MD_SERVER_OCR_TIMEOUT` | 120 | OCR operations timeout |
 | `MD_SERVER_MAX_FILE_SIZE` | 52428800 | Maximum file size in bytes |
 | `MD_SERVER_ALLOW_LOCALHOST` | true | Allow localhost URLs |
 | `MD_SERVER_ALLOW_PRIVATE_NETWORKS` | false | Allow private IP ranges |
@@ -109,107 +112,174 @@ Endpoints:
 - `GET /sse` - SSE connection endpoint
 - `POST /messages` - Message endpoint
 
-## The Convert Tool
+## Available Tools
 
-When integrated, your AI gets access to the `convert` tool.
+When integrated, your AI gets access to two tools: `read_url` and `read_file`.
 
-### Tool Schema
+### read_url
+
+Fetch and read content from a URL, returning clean markdown.
+
+**Use this to read:**
+- Articles, blog posts, news, documentation
+- Online PDFs and Google Docs (public)
+- Dynamic web apps (set `render_js: true`)
+
+#### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `url` | string | Yes | - | URL to fetch (webpage, PDF link, document URL) |
+| `render_js` | boolean | No | false | Execute JavaScript before reading. Enable for SPAs and pages that load content dynamically. |
+
+#### Schema
 
 ```json
 {
-  "name": "convert",
-  "description": "Convert a document, URL, or text to Markdown. Supports PDF, DOCX, XLSX, PPTX, HTML, images, and more.",
+  "name": "read_url",
   "inputSchema": {
     "type": "object",
+    "required": ["url"],
     "properties": {
       "url": {
         "type": "string",
-        "description": "URL to fetch and convert"
+        "format": "uri",
+        "description": "URL to fetch (webpage, PDF link, document URL)"
       },
+      "render_js": {
+        "type": "boolean",
+        "default": false,
+        "description": "Execute JavaScript before reading. Enable for SPAs and pages that load content dynamically."
+      }
+    }
+  }
+}
+```
+
+### read_file
+
+Read and extract content from a document file, returning clean markdown.
+
+**Supported formats:**
+- Documents: PDF, DOCX, DOC, RTF, ODT
+- Spreadsheets: XLSX, XLS, CSV
+- Presentations: PPTX, PPT, ODP
+- Images: PNG, JPG, GIF, WebP, TIFF (auto-OCR)
+- Web: HTML, XML
+- Text: TXT, MD, JSON
+
+Images automatically use OCR to extract visible text - no extra parameters needed.
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | string | Yes | Base64-encoded file data |
+| `filename` | string | Yes | Filename with extension (e.g., 'report.pdf', 'chart.png') |
+
+#### Schema
+
+```json
+{
+  "name": "read_file",
+  "inputSchema": {
+    "type": "object",
+    "required": ["content", "filename"],
+    "properties": {
       "content": {
         "type": "string",
-        "description": "Base64-encoded file content"
-      },
-      "text": {
-        "type": "string",
-        "description": "Raw text or HTML to convert"
+        "description": "Base64-encoded file data"
       },
       "filename": {
         "type": "string",
-        "description": "Filename hint for format detection"
-      },
-      "js_rendering": {
-        "type": "boolean",
-        "default": false,
-        "description": "Enable JavaScript rendering for dynamic web pages"
-      },
-      "ocr_enabled": {
-        "type": "boolean",
-        "default": false,
-        "description": "Enable OCR for images and scanned PDFs"
-      },
-      "include_frontmatter": {
-        "type": "boolean",
-        "default": false,
-        "description": "Include YAML frontmatter with metadata"
+        "description": "Filename with extension (e.g., 'report.pdf', 'chart.png')"
       }
-    },
-    "oneOf": [
-      {"required": ["url"]},
-      {"required": ["content"]},
-      {"required": ["text"]}
+    }
+  }
+}
+```
+
+## Response Format
+
+Both tools return structured JSON responses.
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "title": "Article Title",
+  "content": "# Article Title\n\nMarkdown content here...",
+  "source": "https://example.com/article",
+  "word_count": 1523,
+  "metadata": {
+    "author": "Jane Doe",
+    "description": "A brief summary of the article",
+    "published": "2024-03-15",
+    "language": "en",
+    "format": "text/html",
+    "ocr_applied": false
+  }
+}
+```
+
+### Error Response
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "TIMEOUT",
+    "message": "URL fetch timed out after 60 seconds",
+    "suggestions": [
+      "The server may be slow or unresponsive. Try again later.",
+      "For JavaScript-heavy pages, try with render_js: true"
     ]
   }
 }
 ```
 
-### Parameters
+### Error Codes
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | string | One of three | URL to fetch and convert |
-| `content` | string | One of three | Base64-encoded file content |
-| `text` | string | One of three | Raw text or HTML to convert |
-| `filename` | string | No | Filename hint (e.g., "report.pdf") |
-| `js_rendering` | boolean | No | Enable JavaScript rendering |
-| `ocr_enabled` | boolean | No | Enable OCR for images/scanned docs |
-| `include_frontmatter` | boolean | No | Add YAML metadata header |
-
-You must provide exactly one of: `url`, `content`, or `text`.
+| Code | When | Suggestions |
+|------|------|-------------|
+| `TIMEOUT` | Request exceeded timeout | Retry, check if server is slow |
+| `CONNECTION_FAILED` | Cannot reach URL | Check URL, server may be down |
+| `NOT_FOUND` | 404 response | Verify URL is correct |
+| `ACCESS_DENIED` | 401/403 response | Page may require authentication |
+| `INVALID_URL` | Malformed URL | Check URL format |
+| `UNSUPPORTED_FORMAT` | Unknown file type | See supported formats list |
+| `FILE_TOO_LARGE` | Exceeds size limit | Compress or split the file |
+| `CONVERSION_FAILED` | Processing error | Try different file/format |
+| `CONTENT_EMPTY` | No extractable content | Try `render_js: true` for dynamic pages |
 
 ## Examples
 
-Once configured, your AI can convert documents directly:
+Once configured, your AI can read documents directly:
 
 ### Reading Web Pages
 
-> "Read the Python asyncio documentation and summarize it"
+> "Read this article and summarize it: https://example.com/article"
 
-> "Convert this webpage to markdown: https://example.com/article"
+> "What does the Python asyncio documentation say about tasks?"
 
-### Converting Documents
+### JavaScript-Heavy Sites
+
+> "Read this dashboard with JavaScript rendering enabled: https://app.example.com/stats"
+
+The AI will use `render_js: true` for dynamic content.
+
+### Reading Documents
 
 > "What's in this PDF?" *(with file attached)*
 
 > "Summarize the key points from this Word document"
 
-### JavaScript-Heavy Sites
-
-> "Read this React documentation page with JavaScript rendering enabled"
-
-The AI will use `js_rendering: true` for dynamic content.
-
 ### OCR for Images
 
 > "Extract the text from this screenshot"
 
-The AI will use `ocr_enabled: true` for images and scanned documents.
-
-### With Metadata
-
-> "Convert this page and include metadata in the output"
-
-The AI will use `include_frontmatter: true` to add YAML headers.
+Images are automatically processed with OCR - no special options needed.
 
 ## Troubleshooting
 
@@ -236,7 +306,8 @@ uvx md-server[mcp] --mcp-stdio
    ```bash
    uvx playwright install chromium
    ```
-2. Use `js_rendering: true` in the tool call
+2. Use `render_js: true` in the tool call
+3. Error response will suggest this if content is minimal
 
 ### URL blocked by SSRF protection
 
@@ -259,6 +330,12 @@ Increase the conversion timeout:
 
 ```bash
 export MD_SERVER_CONVERSION_TIMEOUT=300
+```
+
+For browser operations:
+
+```bash
+export MD_SERVER_BROWSER_TIMEOUT=120
 ```
 
 ## See Also

@@ -30,6 +30,8 @@ All md-server settings can be configured via environment variables. Variables us
 | `MD_SERVER_TIMEOUT_SECONDS` | int | `30` | General timeout in seconds |
 | `MD_SERVER_URL_FETCH_TIMEOUT` | int | `30` | URL fetch timeout in seconds |
 | `MD_SERVER_CONVERSION_TIMEOUT` | int | `120` | Conversion timeout in seconds |
+| `MD_SERVER_BROWSER_TIMEOUT` | int | `90` | Browser operations timeout (JS rendering) |
+| `MD_SERVER_OCR_TIMEOUT` | int | `120` | OCR operations timeout in seconds |
 
 ## Security
 
