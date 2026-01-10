@@ -1,12 +1,7 @@
 FROM python:3.11-slim
 
-# System dependencies for browsers and existing tools
+# Install essential tools (ffmpeg, curl)
 RUN apt-get update && apt-get install -y \
-    # Browser system dependencies
-    libnss3 libnspr4 libatk-bridge2.0-0 libdrm2 \
-    libxkbcommon0 libxss1 libasound2 libatspi2.0-0 \
-    libgtk-3-0 libgbm1 \
-    # Existing dependencies
     curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
@@ -19,9 +14,12 @@ COPY src/ ./src/
 
 RUN uv sync --frozen --no-dev
 
-# Install browsers after dependencies but before final layer
-RUN uv run playwright install chromium
-RUN uv run playwright install-deps
+# Install Chromium browser and its system dependencies
+# install-deps needs apt-get, so we update, install deps, then clean up
+RUN uv run playwright install chromium \
+    && apt-get update \
+    && uv run playwright install-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8080
 

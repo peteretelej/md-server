@@ -231,7 +231,9 @@ class TestHandleReadFile:
         assert result.error.code == ErrorCode.UNSUPPORTED_FORMAT
 
     @pytest.mark.asyncio
-    async def test_ocr_applied_in_metadata(self, mock_converter, mock_conversion_result):
+    async def test_ocr_applied_in_metadata(
+        self, mock_converter, mock_conversion_result
+    ):
         """Should set ocr_applied in metadata for images."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 

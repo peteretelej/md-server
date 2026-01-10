@@ -1,6 +1,5 @@
 """Tests for MCP error factories."""
 
-import pytest
 from md_server.mcp.errors import (
     ErrorCode,
     timeout_error,
@@ -14,7 +13,6 @@ from md_server.mcp.errors import (
     unknown_tool_error,
     conversion_error,
     invalid_input_error,
-    SUPPORTED_FORMATS,
 )
 
 
