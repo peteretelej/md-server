@@ -37,6 +37,19 @@ This adds ~15-30 seconds but captures dynamically loaded content.""",
                     "Slower but more complete."
                 ),
             },
+            "max_length": {
+                "type": "integer",
+                "description": "Maximum characters to return. Content is truncated if exceeded.",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Timeout in seconds for the conversion operation.",
+            },
+            "include_frontmatter": {
+                "type": "boolean",
+                "default": True,
+                "description": "Include YAML frontmatter with metadata (title, description, etc.)",
+            },
             "output_format": {
                 "type": "string",
                 "enum": ["markdown", "json"],
@@ -83,6 +96,19 @@ Returns structured JSON with:
                     "Filename with extension (e.g., 'report.pdf', 'chart.png'). "
                     "Used to determine processing method."
                 ),
+            },
+            "max_length": {
+                "type": "integer",
+                "description": "Maximum characters to return. Content is truncated if exceeded.",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Timeout in seconds for the conversion operation.",
+            },
+            "include_frontmatter": {
+                "type": "boolean",
+                "default": True,
+                "description": "Include YAML frontmatter with metadata (title, description, etc.)",
             },
             "output_format": {
                 "type": "string",

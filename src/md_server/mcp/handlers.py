@@ -2,7 +2,7 @@
 
 import mimetypes
 import os
-from typing import Union
+from typing import Optional, Union
 
 from .models import MCPSuccessResponse, MCPErrorResponse, MCPMetadata
 from .errors import (
@@ -39,6 +39,9 @@ async def handle_read_url(
     converter: DocumentConverter,
     url: str,
     render_js: bool = False,
+    max_length: Optional[int] = None,
+    timeout: Optional[int] = None,
+    include_frontmatter: bool = True,
     output_format: str = "markdown",
 ) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
     """
@@ -48,6 +51,9 @@ async def handle_read_url(
         converter: DocumentConverter instance
         url: URL to fetch and convert
         render_js: Whether to render JavaScript before extraction
+        max_length: Maximum characters to return (truncates if exceeded)
+        timeout: Timeout in seconds for conversion (uses converter default if None)
+        include_frontmatter: Include YAML frontmatter with metadata
         output_format: Output format - "markdown" (default) or "json"
 
     Returns:
@@ -60,11 +66,17 @@ async def handle_read_url(
         return invalid_url_error(url)
 
     try:
-        result = await converter.convert_url(
-            url,
-            js_rendering=render_js,
-            include_frontmatter=True,  # Always extract metadata
-        )
+        # Build options dict, only include timeout if explicitly set
+        options: dict = {
+            "js_rendering": render_js,
+            "include_frontmatter": include_frontmatter,
+        }
+        if max_length is not None:
+            options["max_length"] = max_length
+        if timeout is not None:
+            options["timeout"] = timeout
+
+        result = await converter.convert_url(url, **options)
 
         word_count = len(result.markdown.split())
 
@@ -120,6 +132,9 @@ async def handle_read_file(
     converter: DocumentConverter,
     content: bytes,
     filename: str,
+    max_length: Optional[int] = None,
+    timeout: Optional[int] = None,
+    include_frontmatter: bool = True,
     output_format: str = "markdown",
 ) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
     """
@@ -129,6 +144,9 @@ async def handle_read_file(
         converter: DocumentConverter instance
         content: File content as bytes
         filename: Original filename with extension
+        max_length: Maximum characters to return (truncates if exceeded)
+        timeout: Timeout in seconds for conversion (uses converter default if None)
+        include_frontmatter: Include YAML frontmatter with metadata
         output_format: Output format - "markdown" (default) or "json"
 
     Returns:
@@ -145,12 +163,17 @@ async def handle_read_file(
         return file_too_large_error(size_mb, converter.max_file_size_mb)
 
     try:
-        result = await converter.convert_content(
-            content,
-            filename=filename,
-            include_frontmatter=True,
-            ocr_enabled=is_image,  # Auto-enable OCR for images
-        )
+        # Build options dict
+        options: dict = {
+            "include_frontmatter": include_frontmatter,
+            "ocr_enabled": is_image,  # Auto-enable OCR for images
+        }
+        if max_length is not None:
+            options["max_length"] = max_length
+        if timeout is not None:
+            options["timeout"] = timeout
+
+        result = await converter.convert_content(content, filename=filename, **options)
 
         # Return raw markdown by default
         if output_format == "markdown":

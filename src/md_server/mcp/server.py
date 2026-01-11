@@ -58,6 +58,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 converter=converter,
                 url=url,
                 render_js=arguments.get("render_js", False),
+                max_length=arguments.get("max_length"),
+                timeout=arguments.get("timeout"),
+                include_frontmatter=arguments.get("include_frontmatter", True),
                 output_format=output_format,
             )
 
@@ -81,6 +84,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     converter=converter,
                     content=content,
                     filename=filename,
+                    max_length=arguments.get("max_length"),
+                    timeout=arguments.get("timeout"),
+                    include_frontmatter=arguments.get("include_frontmatter", True),
                     output_format=output_format,
                 )
     else:

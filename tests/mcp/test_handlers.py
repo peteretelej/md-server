@@ -213,6 +213,96 @@ class TestHandleReadUrl:
         assert call_kwargs["js_rendering"] is True
 
     @pytest.mark.asyncio
+    async def test_max_length_passed_to_converter(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should pass max_length to converter."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(mock_converter, "https://example.com", max_length=100)
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert call_kwargs["max_length"] == 100
+
+    @pytest.mark.asyncio
+    async def test_max_length_none_not_passed(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should not pass max_length when None."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(mock_converter, "https://example.com")
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert "max_length" not in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_timeout_passed_to_converter(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should pass timeout to converter."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(mock_converter, "https://example.com", timeout=60)
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert call_kwargs["timeout"] == 60
+
+    @pytest.mark.asyncio
+    async def test_timeout_none_not_passed(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should not pass timeout when None."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(mock_converter, "https://example.com")
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert "timeout" not in call_kwargs
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "include_frontmatter,expected",
+        [
+            (True, True),
+            (False, False),
+        ],
+        ids=["with_frontmatter", "without_frontmatter"],
+    )
+    async def test_include_frontmatter_passed_to_converter(
+        self, mock_converter, mock_conversion_result, include_frontmatter, expected
+    ):
+        """Should pass include_frontmatter to converter."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(
+            mock_converter,
+            "https://example.com",
+            include_frontmatter=include_frontmatter,
+        )
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert call_kwargs["include_frontmatter"] is expected
+
+    @pytest.mark.asyncio
+    async def test_include_frontmatter_default_true(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should default include_frontmatter to True."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(mock_converter, "https://example.com")
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert call_kwargs["include_frontmatter"] is True
+
+    @pytest.mark.asyncio
     async def test_word_count_calculated(self, mock_converter, mock_conversion_result):
         """Should calculate word count from content (JSON format)."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
@@ -420,6 +510,93 @@ class TestHandleReadFile:
 
         call_kwargs = mock_converter.convert_content.call_args.kwargs
         assert call_kwargs.get("ocr_enabled") is not True
+
+    @pytest.mark.asyncio
+    async def test_max_length_passed_to_converter(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should pass max_length to converter."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_file(
+            mock_converter, b"fake content", "doc.pdf", max_length=100
+        )
+
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert call_kwargs["max_length"] == 100
+
+    @pytest.mark.asyncio
+    async def test_max_length_none_not_passed(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should not pass max_length when None."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_file(mock_converter, b"fake content", "doc.pdf")
+
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert "max_length" not in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_timeout_passed_to_converter(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should pass timeout to converter."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_file(mock_converter, b"fake content", "doc.pdf", timeout=60)
+
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert call_kwargs["timeout"] == 60
+
+    @pytest.mark.asyncio
+    async def test_timeout_none_not_passed(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should not pass timeout when None."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_file(mock_converter, b"fake content", "doc.pdf")
+
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert "timeout" not in call_kwargs
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "include_frontmatter,expected",
+        [
+            (True, True),
+            (False, False),
+        ],
+        ids=["with_frontmatter", "without_frontmatter"],
+    )
+    async def test_include_frontmatter_passed_to_converter(
+        self, mock_converter, mock_conversion_result, include_frontmatter, expected
+    ):
+        """Should pass include_frontmatter to converter."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_file(
+            mock_converter,
+            b"fake content",
+            "doc.pdf",
+            include_frontmatter=include_frontmatter,
+        )
+
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert call_kwargs["include_frontmatter"] is expected
+
+    @pytest.mark.asyncio
+    async def test_include_frontmatter_default_true(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should default include_frontmatter to True."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_file(mock_converter, b"fake content", "doc.pdf")
+
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert call_kwargs["include_frontmatter"] is True
 
     @pytest.mark.asyncio
     async def test_timeout_error(self, mock_converter):

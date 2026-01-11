@@ -32,6 +32,88 @@ class TestMCPServer:
             assert props["output_format"]["enum"] == ["markdown", "json"]
 
     @pytest.mark.asyncio
+    async def test_list_tools_have_new_options(self):
+        """Tools should have max_length, timeout, include_frontmatter parameters."""
+        tools = await list_tools()
+        for tool in tools:
+            props = tool.inputSchema.get("properties", {})
+            assert "max_length" in props, f"{tool.name} missing max_length"
+            assert "timeout" in props, f"{tool.name} missing timeout"
+            assert "include_frontmatter" in props, (
+                f"{tool.name} missing include_frontmatter"
+            )
+            # Check defaults for include_frontmatter
+            assert props["include_frontmatter"]["default"] is True
+
+    @pytest.mark.asyncio
+    async def test_read_url_passes_new_options(self):
+        """read_url should pass max_length, timeout, include_frontmatter to handler."""
+        with patch("md_server.mcp.server.get_converter") as mock_get:
+            mock_conv = MagicMock()
+            mock_conv.timeout = 60
+            mock_conv.convert_url = AsyncMock(
+                return_value=MagicMock(
+                    markdown="# Hello World with more than five words",
+                    metadata=MagicMock(title="Hello World", detected_language="en"),
+                )
+            )
+            mock_get.return_value = mock_conv
+
+            await call_tool(
+                "read_url",
+                {
+                    "url": "https://example.com",
+                    "max_length": 100,
+                    "timeout": 30,
+                    "include_frontmatter": False,
+                },
+            )
+
+            mock_conv.convert_url.assert_called_once()
+            call_kwargs = mock_conv.convert_url.call_args.kwargs
+            assert call_kwargs["max_length"] == 100
+            assert call_kwargs["timeout"] == 30
+            assert call_kwargs["include_frontmatter"] is False
+
+    @pytest.mark.asyncio
+    async def test_read_file_passes_new_options(self):
+        """read_file should pass max_length, timeout, include_frontmatter to handler."""
+        with patch("md_server.mcp.server.get_converter") as mock_get:
+            mock_metadata = MagicMock()
+            mock_metadata.title = "Doc"
+            mock_metadata.detected_language = "en"
+            mock_metadata.detected_format = "application/pdf"
+
+            mock_conv = MagicMock()
+            mock_conv.timeout = 60
+            mock_conv.max_file_size_mb = 50
+            mock_conv.convert_content = AsyncMock(
+                return_value=MagicMock(
+                    markdown="# Markdown Content with more than five words here",
+                    metadata=mock_metadata,
+                )
+            )
+            mock_get.return_value = mock_conv
+
+            content = base64.b64encode(b"fake pdf content").decode()
+            await call_tool(
+                "read_file",
+                {
+                    "content": content,
+                    "filename": "test.pdf",
+                    "max_length": 200,
+                    "timeout": 45,
+                    "include_frontmatter": False,
+                },
+            )
+
+            mock_conv.convert_content.assert_called_once()
+            call_kwargs = mock_conv.convert_content.call_args.kwargs
+            assert call_kwargs["max_length"] == 200
+            assert call_kwargs["timeout"] == 45
+            assert call_kwargs["include_frontmatter"] is False
+
+    @pytest.mark.asyncio
     async def test_read_url_default_markdown(self):
         """read_url should return raw markdown by default."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
