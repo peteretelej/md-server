@@ -14,6 +14,7 @@ from .errors import (
     URLTimeoutError,
 )
 from ..metadata import MetadataExtractor
+from ..metadata.extractor import estimate_tokens
 from ..models import ConversionResult, ConversionMetadata
 from ..security import validate_url
 
@@ -381,6 +382,16 @@ class DocumentConverter:
 
         if options.get("max_length") and len(markdown) > options["max_length"]:
             markdown = markdown[: options["max_length"]] + "..."
+
+        # Token-based truncation
+        if options.get("max_tokens"):
+            target = options["max_tokens"]
+            current = estimate_tokens(markdown)
+            if current > target:
+                ratio = target / current
+                truncate_at = int(len(markdown) * ratio * 0.95)
+                markdown = markdown[:truncate_at].rstrip()
+                markdown += "\n\n[truncated to fit token limit]"
 
         return markdown
 

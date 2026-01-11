@@ -383,3 +383,80 @@ class TestDocumentConverter:
         text_content = b"Just some regular text content without any special markers"
         result = converter._detect_format(text_content)
         assert result == "text/plain"
+
+
+class TestTokenTruncation:
+    """Tests for token-based truncation in _apply_options."""
+
+    @pytest.fixture
+    def converter(self):
+        return DocumentConverter()
+
+    @pytest.mark.parametrize(
+        "content,max_tokens,should_truncate",
+        [
+            ("Short content", 100, False),
+            ("A " * 5000, 100, True),
+            ("", 100, False),
+            ("Unicode: 中文 emoji 🎉 " * 100, 20, True),
+        ],
+        ids=[
+            "short_no_truncate",
+            "long_truncate",
+            "empty_no_truncate",
+            "unicode_truncate",
+        ],
+    )
+    def test_token_truncation(self, converter, content, max_tokens, should_truncate):
+        """Test token truncation behavior for various content types."""
+        result = converter._apply_options(content, {"max_tokens": max_tokens})
+        if should_truncate:
+            assert "[truncated to fit token limit]" in result
+        else:
+            assert "[truncated" not in result
+
+    @pytest.mark.parametrize("max_tokens", [50, 100, 500, 1000])
+    def test_token_limit_respected(self, converter, max_tokens):
+        """Verify truncated content stays within token limit."""
+        from md_server.metadata.extractor import estimate_tokens
+
+        long_content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 500
+        result = converter._apply_options(long_content, {"max_tokens": max_tokens})
+
+        actual_tokens = estimate_tokens(result)
+        # Allow 15% margin for safety margin and truncation indicator
+        assert actual_tokens <= max_tokens * 1.15
+
+    def test_no_truncation_when_under_limit(self, converter):
+        """Content under token limit should not be truncated."""
+        content = "Hello world"
+        result = converter._apply_options(content, {"max_tokens": 1000})
+        assert result == content
+        assert "[truncated" not in result
+
+    def test_truncation_indicator_appended(self, converter):
+        """Truncated content should have indicator appended."""
+        long_content = "word " * 10000
+        result = converter._apply_options(long_content, {"max_tokens": 50})
+        assert result.endswith("[truncated to fit token limit]")
+
+    def test_max_tokens_none_no_truncation(self, converter):
+        """max_tokens=None should not trigger truncation."""
+        content = "word " * 1000
+        result = converter._apply_options(content, {"max_tokens": None})
+        assert "[truncated" not in result
+
+    def test_max_tokens_zero_handled(self, converter):
+        """max_tokens=0 should be treated as falsy (no truncation)."""
+        content = "Some content"
+        result = converter._apply_options(content, {"max_tokens": 0})
+        # 0 is falsy, so no truncation
+        assert result == content
+
+    def test_both_max_length_and_max_tokens(self, converter):
+        """Both max_length and max_tokens can be applied."""
+        content = "A" * 1000
+        result = converter._apply_options(content, {"max_length": 50, "max_tokens": 10})
+        # max_length truncates first, then max_tokens
+        assert len(result) <= 100  # max_length 50 + "..." + token truncation indicator
+        assert "..." in result or "[truncated" in result

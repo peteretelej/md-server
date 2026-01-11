@@ -40,6 +40,7 @@ async def handle_read_url(
     url: str,
     render_js: bool = False,
     max_length: Optional[int] = None,
+    max_tokens: Optional[int] = None,
     timeout: Optional[int] = None,
     include_frontmatter: bool = True,
     output_format: str = "markdown",
@@ -52,6 +53,7 @@ async def handle_read_url(
         url: URL to fetch and convert
         render_js: Whether to render JavaScript before extraction
         max_length: Maximum characters to return (truncates if exceeded)
+        max_tokens: Maximum tokens to return (uses tiktoken cl100k_base encoding)
         timeout: Timeout in seconds for conversion (uses converter default if None)
         include_frontmatter: Include YAML frontmatter with metadata
         output_format: Output format - "markdown" (default) or "json"
@@ -73,6 +75,8 @@ async def handle_read_url(
         }
         if max_length is not None:
             options["max_length"] = max_length
+        if max_tokens is not None:
+            options["max_tokens"] = max_tokens
         if timeout is not None:
             options["timeout"] = timeout
 
@@ -133,6 +137,7 @@ async def handle_read_file(
     content: bytes,
     filename: str,
     max_length: Optional[int] = None,
+    max_tokens: Optional[int] = None,
     timeout: Optional[int] = None,
     include_frontmatter: bool = True,
     output_format: str = "markdown",
@@ -145,6 +150,7 @@ async def handle_read_file(
         content: File content as bytes
         filename: Original filename with extension
         max_length: Maximum characters to return (truncates if exceeded)
+        max_tokens: Maximum tokens to return (uses tiktoken cl100k_base encoding)
         timeout: Timeout in seconds for conversion (uses converter default if None)
         include_frontmatter: Include YAML frontmatter with metadata
         output_format: Output format - "markdown" (default) or "json"
@@ -170,6 +176,8 @@ async def handle_read_file(
         }
         if max_length is not None:
             options["max_length"] = max_length
+        if max_tokens is not None:
+            options["max_tokens"] = max_tokens
         if timeout is not None:
             options["timeout"] = timeout
 

@@ -20,6 +20,11 @@ class ConversionOptions(BaseModel):
     max_length: Optional[int] = Field(
         default=None, description="Truncate output for previews"
     )
+    max_tokens: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Maximum tokens to return (uses tiktoken cl100k_base encoding)",
+    )
     clean_markdown: Optional[bool] = Field(
         default=False, description="Normalize/clean markdown output"
     )

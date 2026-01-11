@@ -41,6 +41,10 @@ This adds ~15-30 seconds but captures dynamically loaded content.""",
                 "type": "integer",
                 "description": "Maximum characters to return. Content is truncated if exceeded.",
             },
+            "max_tokens": {
+                "type": "integer",
+                "description": "Maximum tokens to return (uses tiktoken cl100k_base encoding).",
+            },
             "timeout": {
                 "type": "integer",
                 "description": "Timeout in seconds for the conversion operation.",
@@ -100,6 +104,10 @@ Returns structured JSON with:
             "max_length": {
                 "type": "integer",
                 "description": "Maximum characters to return. Content is truncated if exceeded.",
+            },
+            "max_tokens": {
+                "type": "integer",
+                "description": "Maximum tokens to return (uses tiktoken cl100k_base encoding).",
             },
             "timeout": {
                 "type": "integer",
