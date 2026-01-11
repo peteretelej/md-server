@@ -230,7 +230,7 @@ class TestMCPResponseFormat:
             # Check required fields
             assert "success" in data
             assert "title" in data
-            assert "content" in data
+            assert "markdown" in data
             assert "source" in data
             assert "word_count" in data
             assert "metadata" in data

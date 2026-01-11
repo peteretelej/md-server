@@ -103,7 +103,7 @@ async def handle_read_url(
         # Return structured JSON response
         return MCPSuccessResponse(
             title=result.metadata.title or _extract_title_from_url(url),
-            content=result.markdown,
+            markdown=result.markdown,
             source=url,
             word_count=word_count,
             metadata=MCPMetadata(
@@ -213,7 +213,7 @@ async def handle_read_file(
 
         return MCPSuccessResponse(
             title=result.metadata.title or filename,
-            content=result.markdown,
+            markdown=result.markdown,
             source=filename,
             word_count=word_count,
             metadata=MCPMetadata(

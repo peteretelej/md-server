@@ -25,7 +25,7 @@ class MCPSuccessResponse(BaseModel):
 
     success: bool = Field(default=True)
     title: str
-    content: str
+    markdown: str
     source: str
     word_count: int
     metadata: MCPMetadata = Field(default_factory=MCPMetadata)
