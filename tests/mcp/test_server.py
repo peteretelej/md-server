@@ -42,8 +42,103 @@ class TestMCPServer:
             assert "include_frontmatter" in props, (
                 f"{tool.name} missing include_frontmatter"
             )
-            # Check defaults for include_frontmatter
             assert props["include_frontmatter"]["default"] is True
+
+    # --- Output Format Tests (consolidated) ---
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "output_format,is_json",
+        [
+            (None, False),  # default is markdown
+            ("markdown", False),
+            ("json", True),
+        ],
+        ids=["default_markdown", "explicit_markdown", "json"],
+    )
+    async def test_read_url_output_format(self, output_format, is_json):
+        """read_url should return correct format based on output_format."""
+        with patch("md_server.mcp.server.get_converter") as mock_get:
+            mock_conv = MagicMock()
+            mock_conv.timeout = 60
+            mock_metadata = MagicMock(
+                title="Hello World",
+                detected_language="en",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
+            mock_conv.convert_url = AsyncMock(
+                return_value=MagicMock(
+                    markdown="# Hello World with more than five words",
+                    metadata=mock_metadata,
+                )
+            )
+            mock_get.return_value = mock_conv
+
+            args = {"url": "https://example.com"}
+            if output_format is not None:
+                args["output_format"] = output_format
+
+            result = await call_tool("read_url", args)
+
+            assert len(result) == 1
+            assert result[0].type == "text"
+            if is_json:
+                data = json.loads(result[0].text)
+                assert data["success"] is True
+            else:
+                assert result[0].text.startswith("# Hello World")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "output_format,is_json",
+        [
+            (None, False),  # default is markdown
+            ("markdown", False),
+            ("json", True),
+        ],
+        ids=["default_markdown", "explicit_markdown", "json"],
+    )
+    async def test_read_file_output_format(self, output_format, is_json):
+        """read_file should return correct format based on output_format."""
+        with patch("md_server.mcp.server.get_converter") as mock_get:
+            mock_metadata = MagicMock()
+            mock_metadata.title = "Doc"
+            mock_metadata.detected_language = "en"
+            mock_metadata.detected_format = "application/pdf"
+            mock_metadata.was_truncated = False
+            mock_metadata.original_length = None
+            mock_metadata.original_tokens = None
+            mock_metadata.truncation_mode = None
+
+            mock_conv = MagicMock()
+            mock_conv.timeout = 60
+            mock_conv.max_file_size_mb = 50
+            mock_conv.convert_content = AsyncMock(
+                return_value=MagicMock(
+                    markdown="# Markdown Content with more than five words here",
+                    metadata=mock_metadata,
+                )
+            )
+            mock_get.return_value = mock_conv
+
+            content = base64.b64encode(b"fake pdf content").decode()
+            args = {"content": content, "filename": "test.pdf"}
+            if output_format is not None:
+                args["output_format"] = output_format
+
+            result = await call_tool("read_file", args)
+
+            assert len(result) == 1
+            if is_json:
+                data = json.loads(result[0].text)
+                assert data["success"] is True
+            else:
+                assert result[0].text.startswith("# Markdown Content")
+
+    # --- Parameter Passing Tests ---
 
     @pytest.mark.asyncio
     async def test_read_url_passes_new_options(self):
@@ -113,204 +208,53 @@ class TestMCPServer:
             assert call_kwargs["timeout"] == 45
             assert call_kwargs["include_frontmatter"] is False
 
-    @pytest.mark.asyncio
-    async def test_read_url_default_markdown(self):
-        """read_url should return raw markdown by default."""
-        with patch("md_server.mcp.server.get_converter") as mock_get:
-            mock_conv = MagicMock()
-            mock_conv.timeout = 60
-            mock_conv.convert_url = AsyncMock(
-                return_value=MagicMock(
-                    markdown="# Hello World with more than five words",
-                    metadata=MagicMock(title="Hello World", detected_language="en"),
-                )
-            )
-            mock_get.return_value = mock_conv
-
-            result = await call_tool("read_url", {"url": "https://example.com"})
-
-            assert len(result) == 1
-            assert result[0].type == "text"
-            # Default is markdown - should be raw string, not JSON
-            assert result[0].text.startswith("# Hello World")
+    # --- Error Handling Tests (consolidated) ---
 
     @pytest.mark.asyncio
-    async def test_read_url_explicit_markdown(self):
-        """read_url with output_format=markdown should return raw markdown."""
-        with patch("md_server.mcp.server.get_converter") as mock_get:
-            mock_conv = MagicMock()
-            mock_conv.timeout = 60
-            mock_conv.convert_url = AsyncMock(
-                return_value=MagicMock(
-                    markdown="# Hello World with more than five words",
-                    metadata=MagicMock(title="Hello World", detected_language="en"),
-                )
-            )
-            mock_get.return_value = mock_conv
-
-            result = await call_tool(
-                "read_url",
-                {"url": "https://example.com", "output_format": "markdown"},
-            )
-
-            assert len(result) == 1
-            assert result[0].text.startswith("# Hello World")
-            # Should not be parseable as JSON with success field
-            try:
-                data = json.loads(result[0].text)
-                assert "success" not in data  # If it parses, shouldn't have success
-            except json.JSONDecodeError:
-                pass  # Expected - raw markdown isn't JSON
-
-    @pytest.mark.asyncio
-    async def test_read_url_success(self):
-        """read_url with output_format=json should return JSON response."""
-        with patch("md_server.mcp.server.get_converter") as mock_get:
-            mock_conv = MagicMock()
-            mock_conv.timeout = 60
-            mock_metadata = MagicMock(
-                title="Hello World",
-                detected_language="en",
-                was_truncated=False,
-                original_length=None,
-                original_tokens=None,
-                truncation_mode=None,
-            )
-            mock_conv.convert_url = AsyncMock(
-                return_value=MagicMock(
-                    markdown="# Hello World with more than five words",
-                    metadata=mock_metadata,
-                )
-            )
-            mock_get.return_value = mock_conv
-
-            result = await call_tool(
-                "read_url",
-                {"url": "https://example.com", "output_format": "json"},
-            )
-
-            assert len(result) == 1
-            assert result[0].type == "text"
-            data = json.loads(result[0].text)
-            assert data["success"] is True
-
-    @pytest.mark.asyncio
-    async def test_read_file_default_markdown(self):
-        """read_file should return raw markdown by default."""
-        with patch("md_server.mcp.server.get_converter") as mock_get:
-            mock_metadata = MagicMock()
-            mock_metadata.title = "Doc"
-            mock_metadata.detected_language = "en"
-            mock_metadata.detected_format = "application/pdf"
-
-            mock_conv = MagicMock()
-            mock_conv.timeout = 60
-            mock_conv.max_file_size_mb = 50
-            mock_conv.convert_content = AsyncMock(
-                return_value=MagicMock(
-                    markdown="# Markdown Content with more than five words here",
-                    metadata=mock_metadata,
-                )
-            )
-            mock_get.return_value = mock_conv
-
-            content = base64.b64encode(b"fake pdf content").decode()
-            result = await call_tool(
-                "read_file", {"content": content, "filename": "test.pdf"}
-            )
-
-            assert len(result) == 1
-            # Default is markdown - should be raw string
-            assert result[0].text.startswith("# Markdown Content")
-
-    @pytest.mark.asyncio
-    async def test_read_file_success(self):
-        """read_file with output_format=json should return JSON response."""
-        with patch("md_server.mcp.server.get_converter") as mock_get:
-            mock_metadata = MagicMock()
-            mock_metadata.title = "Doc"
-            mock_metadata.detected_language = "en"
-            mock_metadata.detected_format = "application/pdf"
-            mock_metadata.was_truncated = False
-            mock_metadata.original_length = None
-            mock_metadata.original_tokens = None
-            mock_metadata.truncation_mode = None
-            mock_metadata.get = MagicMock(return_value=None)
-
-            mock_conv = MagicMock()
-            mock_conv.timeout = 60
-            mock_conv.max_file_size_mb = 50
-            mock_conv.convert_content = AsyncMock(
-                return_value=MagicMock(
-                    markdown="# Markdown Content with more than five words here",
-                    metadata=mock_metadata,
-                )
-            )
-            mock_get.return_value = mock_conv
-
-            content = base64.b64encode(b"fake pdf content").decode()
-            result = await call_tool(
+    @pytest.mark.parametrize(
+        "tool_name,args,expected_code",
+        [
+            ("read_url", {}, "INVALID_INPUT"),  # missing url
+            ("read_url", {"output_format": "markdown"}, "INVALID_INPUT"),  # missing url
+            ("read_file", {"filename": "test.pdf"}, "INVALID_INPUT"),  # missing content
+            (
                 "read_file",
-                {"content": content, "filename": "test.pdf", "output_format": "json"},
-            )
+                {"content": base64.b64encode(b"data").decode()},
+                "INVALID_INPUT",
+            ),  # missing filename
+            (
+                "read_file",
+                {"content": "not-valid-base64!!!", "filename": "test.pdf"},
+                "INVALID_INPUT",
+            ),  # invalid base64
+            ("unknown_tool", {}, "UNKNOWN_TOOL"),
+        ],
+        ids=[
+            "missing_url",
+            "missing_url_with_format",
+            "missing_content",
+            "missing_filename",
+            "invalid_base64",
+            "unknown_tool",
+        ],
+    )
+    async def test_error_responses(self, tool_name, args, expected_code):
+        """Should return correct error code for invalid inputs."""
+        result = await call_tool(tool_name, args)
 
-            assert len(result) == 1
-            data = json.loads(result[0].text)
-            assert data["success"] is True
+        assert len(result) == 1
+        data = json.loads(result[0].text)
+        assert data["success"] is False
+        assert data["error"]["code"] == expected_code
 
     @pytest.mark.asyncio
-    async def test_unknown_tool_returns_error(self):
-        """Unknown tool should return error response, not raise."""
+    async def test_unknown_tool_suggests_alternatives(self):
+        """Unknown tool error should suggest available tools."""
         result = await call_tool("unknown_tool", {})
 
-        assert len(result) == 1
         data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "UNKNOWN_TOOL"
-
-    @pytest.mark.asyncio
-    async def test_error_always_json_with_markdown_format(self):
-        """Error responses should be JSON even when output_format=markdown."""
-        result = await call_tool(
-            "read_url", {"output_format": "markdown"}
-        )  # Missing url
-
-        assert len(result) == 1
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
-
-    @pytest.mark.asyncio
-    async def test_missing_url_returns_error(self):
-        """read_url without url should return error."""
-        result = await call_tool("read_url", {})
-
-        assert len(result) == 1
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
-
-    @pytest.mark.asyncio
-    async def test_missing_content_returns_error(self):
-        """read_file without content should return error."""
-        result = await call_tool("read_file", {"filename": "test.pdf"})
-
-        assert len(result) == 1
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
-
-    @pytest.mark.asyncio
-    async def test_invalid_base64_returns_error(self):
-        """read_file with invalid base64 should return error."""
-        result = await call_tool(
-            "read_file", {"content": "not-valid-base64!!!", "filename": "test.pdf"}
-        )
-
-        assert len(result) == 1
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
+        assert "read_url" in str(data["error"]["suggestions"])
+        assert "read_file" in str(data["error"]["suggestions"])
 
 
 @pytest.mark.unit

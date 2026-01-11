@@ -80,17 +80,6 @@ class TestMCPServerIntegration:
             assert call_kwargs["js_rendering"] is True
 
     @pytest.mark.asyncio
-    async def test_call_read_url_missing_url(self):
-        """call_tool should return error for missing URL."""
-        from md_server.mcp.server import call_tool
-
-        result = await call_tool("read_url", {})
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
-
-    @pytest.mark.asyncio
     async def test_call_read_file_success(self):
         """call_tool should handle read_file successfully with JSON format."""
         from md_server.mcp.server import call_tool
@@ -130,37 +119,30 @@ class TestMCPServerIntegration:
             assert data["success"] is True
             assert data["source"] == "test.pdf"
 
-    @pytest.mark.asyncio
-    async def test_call_read_file_missing_content(self):
-        """call_tool should return error for missing content."""
-        from md_server.mcp.server import call_tool
-
-        result = await call_tool("read_file", {"filename": "test.pdf"})
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
+    # --- Input Validation Error Tests (consolidated) ---
 
     @pytest.mark.asyncio
-    async def test_call_read_file_missing_filename(self):
-        """call_tool should return error for missing filename."""
+    @pytest.mark.parametrize(
+        "tool_name,args",
+        [
+            ("read_url", {}),  # missing URL
+            ("read_file", {"filename": "test.pdf"}),  # missing content
+            (
+                "read_file",
+                {"content": base64.b64encode(b"data").decode()},
+            ),  # missing filename
+            (
+                "read_file",
+                {"content": "not-valid-base64!!!", "filename": "test.pdf"},
+            ),  # invalid base64
+        ],
+        ids=["missing_url", "missing_content", "missing_filename", "invalid_base64"],
+    )
+    async def test_invalid_input_returns_error(self, tool_name, args):
+        """call_tool should return error for invalid inputs."""
         from md_server.mcp.server import call_tool
 
-        content_b64 = base64.b64encode(b"data").decode()
-        result = await call_tool("read_file", {"content": content_b64})
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
-
-    @pytest.mark.asyncio
-    async def test_call_read_file_invalid_base64(self):
-        """call_tool should return error for invalid base64."""
-        from md_server.mcp.server import call_tool
-
-        result = await call_tool(
-            "read_file", {"content": "not-valid-base64!!!", "filename": "test.pdf"}
-        )
+        result = await call_tool(tool_name, args)
 
         data = json.loads(result[0].text)
         assert data["success"] is False
