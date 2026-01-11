@@ -30,13 +30,18 @@ class TestMCPServerIntegration:
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
+            mock_metadata = MagicMock(
+                title="Test Page",
+                detected_language="en",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
             mock_conv.convert_url = AsyncMock(
                 return_value=MagicMock(
                     markdown="# Test content with more than five words here",
-                    metadata=MagicMock(
-                        title="Test Page",
-                        detected_language="en",
-                    ),
+                    metadata=mock_metadata,
                 )
             )
             mock_get.return_value = mock_conv
@@ -94,13 +99,19 @@ class TestMCPServerIntegration:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
             mock_conv.max_file_size_mb = 50
+            mock_metadata = MagicMock(
+                title="Document",
+                detected_language=None,
+                detected_format="application/pdf",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
             mock_conv.convert_content = AsyncMock(
                 return_value=MagicMock(
                     markdown="# PDF Content with enough words here",
-                    metadata=MagicMock(
-                        title="Document",
-                        detected_language=None,
-                    ),
+                    metadata=mock_metadata,
                 )
             )
             mock_get.return_value = mock_conv
@@ -194,10 +205,18 @@ class TestMCPResponseFormat:
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
+            mock_metadata = MagicMock(
+                title="Title",
+                detected_language="en",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
             mock_conv.convert_url = AsyncMock(
                 return_value=MagicMock(
                     markdown="# Content with more than five words today",
-                    metadata=MagicMock(title="Title", detected_language="en"),
+                    metadata=mock_metadata,
                 )
             )
             mock_get.return_value = mock_conv

@@ -34,6 +34,11 @@ def mock_conversion_result():
     result.metadata = MagicMock()
     result.metadata.title = "Test Title"
     result.metadata.detected_language = "en"
+    result.metadata.detected_format = "text/html"
+    result.metadata.was_truncated = False
+    result.metadata.original_length = None
+    result.metadata.original_tokens = None
+    result.metadata.truncation_mode = None
     return result
 
 

@@ -109,6 +109,10 @@ async def handle_read_url(
             metadata=MCPMetadata(
                 description=None,  # Could be extracted from meta tags
                 language=result.metadata.detected_language,
+                was_truncated=result.metadata.was_truncated or None,
+                original_length=result.metadata.original_length,
+                original_tokens=result.metadata.original_tokens,
+                truncation_mode=result.metadata.truncation_mode,
             ),
         )
 
@@ -217,6 +221,10 @@ async def handle_read_file(
                 format=mime_type or result.metadata.detected_format,
                 ocr_applied=is_image,
                 language=result.metadata.detected_language,
+                was_truncated=result.metadata.was_truncated or None,
+                original_length=result.metadata.original_length,
+                original_tokens=result.metadata.original_tokens,
+                truncation_mode=result.metadata.truncation_mode,
             ),
         )
 

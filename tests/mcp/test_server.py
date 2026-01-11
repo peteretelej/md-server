@@ -168,10 +168,18 @@ class TestMCPServer:
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
+            mock_metadata = MagicMock(
+                title="Hello World",
+                detected_language="en",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
             mock_conv.convert_url = AsyncMock(
                 return_value=MagicMock(
                     markdown="# Hello World with more than five words",
-                    metadata=MagicMock(title="Hello World", detected_language="en"),
+                    metadata=mock_metadata,
                 )
             )
             mock_get.return_value = mock_conv
@@ -223,6 +231,10 @@ class TestMCPServer:
             mock_metadata.title = "Doc"
             mock_metadata.detected_language = "en"
             mock_metadata.detected_format = "application/pdf"
+            mock_metadata.was_truncated = False
+            mock_metadata.original_length = None
+            mock_metadata.original_tokens = None
+            mock_metadata.truncation_mode = None
             mock_metadata.get = MagicMock(return_value=None)
 
             mock_conv = MagicMock()

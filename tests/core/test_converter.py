@@ -205,13 +205,13 @@ class TestDocumentConverter:
     def test_apply_options_max_length(self, converter):
         long_markdown = "x" * 100
         options = {"max_length": 10}
-        result = converter._apply_options(long_markdown, options)
+        result, info = converter._apply_options(long_markdown, options)
         assert result == "x" * 10 + "..."
 
     def test_apply_options_clean_markdown_disabled(self, converter):
         messy_markdown = "\n\n# Title\n\n\n"
         options = {"clean_markdown": False}
-        result = converter._apply_options(messy_markdown, options)
+        result, info = converter._apply_options(messy_markdown, options)
         assert result == messy_markdown
 
     def test_validate_url_empty_string(self, converter):
@@ -238,13 +238,18 @@ class TestDocumentConverter:
     @pytest.mark.asyncio
     async def test_image_extraction_workflow_option(self, converter):
         # Test that image extraction option is passed through
+        from md_server.models import TruncationInfo
+
         html_content = b"<html><body><img src='test.jpg' alt='Test'/></body></html>"
         options = {"extract_images": True}
 
         with patch(
             "md_server.core.converter.DocumentConverter._sync_convert_content"
         ) as mock_sync:
-            mock_sync.return_value = "![Test](test.jpg)\n\nContent with image"
+            mock_sync.return_value = (
+                "![Test](test.jpg)\n\nContent with image",
+                TruncationInfo(),
+            )
             result = await converter.convert_content(html_content, **options)
 
             assert result.success is True
@@ -277,7 +282,7 @@ class TestDocumentConverter:
             mock_result = type("Result", (), {"markdown": "# Test Content"})()
             mock_convert.return_value = mock_result
 
-            result = converter._sync_convert_content(content, "test.html")
+            result, info = converter._sync_convert_content(content, "test.html")
 
             assert result == "# Test Content"
             mock_convert.assert_called_once()
@@ -291,7 +296,7 @@ class TestDocumentConverter:
             mock_result = type("Result", (), {"markdown": "# HTML Title"})()
             mock_convert.return_value = mock_result
 
-            result = converter._sync_convert_text_with_mime_type(text, mime_type)
+            result, info = converter._sync_convert_text_with_mime_type(text, mime_type)
 
             assert result == "# HTML Title"
             mock_convert.assert_called_once()
@@ -409,9 +414,9 @@ class TestTokenTruncation:
     )
     def test_token_truncation(self, converter, content, max_tokens, should_truncate):
         """Test token truncation behavior for various content types."""
-        result = converter._apply_options(content, {"max_tokens": max_tokens})
+        result, info = converter._apply_options(content, {"max_tokens": max_tokens})
         if should_truncate:
-            assert "[truncated to fit token limit]" in result
+            assert "[truncated:" in result
         else:
             assert "[truncated" not in result
 
@@ -421,42 +426,46 @@ class TestTokenTruncation:
         from md_server.metadata.extractor import estimate_tokens
 
         long_content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 500
-        result = converter._apply_options(long_content, {"max_tokens": max_tokens})
+        result, info = converter._apply_options(
+            long_content, {"max_tokens": max_tokens}
+        )
 
         actual_tokens = estimate_tokens(result)
-        # Allow 15% margin for safety margin and truncation indicator
-        assert actual_tokens <= max_tokens * 1.15
+        # Allow 25% margin for safety margin and truncation indicator (indicator includes size info)
+        assert actual_tokens <= max_tokens * 1.25
 
     def test_no_truncation_when_under_limit(self, converter):
         """Content under token limit should not be truncated."""
         content = "Hello world"
-        result = converter._apply_options(content, {"max_tokens": 1000})
+        result, info = converter._apply_options(content, {"max_tokens": 1000})
         assert result == content
         assert "[truncated" not in result
 
     def test_truncation_indicator_appended(self, converter):
         """Truncated content should have indicator appended."""
         long_content = "word " * 10000
-        result = converter._apply_options(long_content, {"max_tokens": 50})
-        assert result.endswith("[truncated to fit token limit]")
+        result, info = converter._apply_options(long_content, {"max_tokens": 50})
+        assert "[truncated:" in result and "tokens]" in result
 
     def test_max_tokens_none_no_truncation(self, converter):
         """max_tokens=None should not trigger truncation."""
         content = "word " * 1000
-        result = converter._apply_options(content, {"max_tokens": None})
+        result, info = converter._apply_options(content, {"max_tokens": None})
         assert "[truncated" not in result
 
     def test_max_tokens_zero_handled(self, converter):
         """max_tokens=0 should be treated as falsy (no truncation)."""
         content = "Some content"
-        result = converter._apply_options(content, {"max_tokens": 0})
+        result, info = converter._apply_options(content, {"max_tokens": 0})
         # 0 is falsy, so no truncation
         assert result == content
 
     def test_both_max_length_and_max_tokens(self, converter):
         """Both max_length and max_tokens can be applied."""
         content = "A" * 1000
-        result = converter._apply_options(content, {"max_length": 50, "max_tokens": 10})
+        result, info = converter._apply_options(
+            content, {"max_length": 50, "max_tokens": 10}
+        )
         # max_length truncates first, then max_tokens
         assert len(result) <= 100  # max_length 50 + "..." + token truncation indicator
         assert "..." in result or "[truncated" in result
@@ -511,7 +520,7 @@ Fifth paragraph ends it."""
     )
     def test_sections_mode_truncation(self, converter, limit, expected_sections):
         """Test sections mode truncates to correct number of sections."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.SECTION_CONTENT,
             {"truncate_mode": "sections", "truncate_limit": limit},
         )
@@ -520,7 +529,7 @@ Fifth paragraph ends it."""
 
     def test_sections_mode_includes_intro(self, converter):
         """Sections mode should include content before first ## heading."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.SECTION_CONTENT,
             {"truncate_mode": "sections", "truncate_limit": 1},
         )
@@ -531,7 +540,7 @@ Fifth paragraph ends it."""
     def test_sections_mode_no_sections(self, converter):
         """Content without ## headings should return full content."""
         no_sections = "Just some text\n\nwith paragraphs\n\nbut no sections."
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             no_sections,
             {"truncate_mode": "sections", "truncate_limit": 2},
         )
@@ -540,7 +549,7 @@ Fifth paragraph ends it."""
 
     def test_sections_mode_adds_truncation_indicator(self, converter):
         """Sections mode should add truncation indicator when truncating."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.SECTION_CONTENT,
             {"truncate_mode": "sections", "truncate_limit": 1},
         )
@@ -548,7 +557,7 @@ Fifth paragraph ends it."""
 
     def test_sections_mode_no_indicator_when_not_truncated(self, converter):
         """No truncation indicator when all sections fit."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.SECTION_CONTENT,
             {"truncate_mode": "sections", "truncate_limit": 10},
         )
@@ -569,7 +578,7 @@ Fifth paragraph ends it."""
     )
     def test_paragraphs_mode_truncation(self, converter, limit, expected_paragraphs):
         """Test paragraphs mode truncates to correct number of paragraphs."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.PARAGRAPH_CONTENT,
             {"truncate_mode": "paragraphs", "truncate_limit": limit},
         )
@@ -582,7 +591,7 @@ Fifth paragraph ends it."""
     def test_paragraphs_mode_single_paragraph(self, converter):
         """Single paragraph content should return full content."""
         single = "Just one paragraph without any breaks."
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             single,
             {"truncate_mode": "paragraphs", "truncate_limit": 2},
         )
@@ -591,7 +600,7 @@ Fifth paragraph ends it."""
 
     def test_paragraphs_mode_adds_truncation_indicator(self, converter):
         """Paragraphs mode should add truncation indicator when truncating."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.PARAGRAPH_CONTENT,
             {"truncate_mode": "paragraphs", "truncate_limit": 2},
         )
@@ -599,7 +608,7 @@ Fifth paragraph ends it."""
 
     def test_paragraphs_mode_no_indicator_when_not_truncated(self, converter):
         """No truncation indicator when all paragraphs fit."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.PARAGRAPH_CONTENT,
             {"truncate_mode": "paragraphs", "truncate_limit": 10},
         )
@@ -610,18 +619,18 @@ Fifth paragraph ends it."""
     def test_chars_mode_truncation(self, converter):
         """Test chars mode truncates to character limit."""
         content = "A" * 100
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             content,
             {"truncate_mode": "chars", "truncate_limit": 50},
         )
         # Should be 50 chars + truncation indicator
         assert result.startswith("A" * 50)
-        assert "[truncated...]" in result
+        assert "[truncated:" in result
 
     def test_chars_mode_no_truncation_under_limit(self, converter):
         """Chars mode should not truncate when under limit."""
         content = "Short content"
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             content,
             {"truncate_mode": "chars", "truncate_limit": 100},
         )
@@ -633,16 +642,16 @@ Fifth paragraph ends it."""
     def test_tokens_mode_truncation(self, converter):
         """Test tokens mode truncates to token limit via truncate_mode."""
         content = "word " * 1000
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             content,
             {"truncate_mode": "tokens", "truncate_limit": 50},
         )
-        assert "[truncated...]" in result
+        assert "[truncated:" in result
 
     def test_tokens_mode_no_truncation_under_limit(self, converter):
         """Tokens mode should not truncate when under limit."""
         content = "Short content"
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             content,
             {"truncate_mode": "tokens", "truncate_limit": 100},
         )
@@ -653,7 +662,7 @@ Fifth paragraph ends it."""
 
     def test_empty_content(self, converter):
         """Empty content should return empty string."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             "",
             {"truncate_mode": "sections", "truncate_limit": 5},
         )
@@ -661,7 +670,7 @@ Fifth paragraph ends it."""
 
     def test_mode_without_limit(self, converter):
         """Mode without limit should not truncate."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.SECTION_CONTENT,
             {"truncate_mode": "sections"},
         )
@@ -669,7 +678,7 @@ Fifth paragraph ends it."""
 
     def test_limit_without_mode(self, converter):
         """Limit without mode should not truncate."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.SECTION_CONTENT,
             {"truncate_limit": 2},
         )
@@ -678,19 +687,19 @@ Fifth paragraph ends it."""
     def test_backwards_compat_max_length(self, converter):
         """max_length should still work for backwards compatibility."""
         content = "A" * 100
-        result = converter._apply_options(content, {"max_length": 20})
+        result, info = converter._apply_options(content, {"max_length": 20})
         assert result == "A" * 20 + "..."
 
     def test_backwards_compat_max_tokens(self, converter):
         """max_tokens should still work for backwards compatibility."""
         content = "word " * 1000
-        result = converter._apply_options(content, {"max_tokens": 50})
-        assert "[truncated to fit token limit]" in result
+        result, info = converter._apply_options(content, {"max_tokens": 50})
+        assert "[truncated:" in result
 
     def test_truncate_mode_overrides_max_length(self, converter):
         """truncate_mode should take precedence over max_length/max_tokens."""
         content = self.SECTION_CONTENT
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             content,
             {
                 "truncate_mode": "sections",
@@ -871,18 +880,18 @@ Fourth paragraph at the end."""
 
     def test_chars_mode_uses_safe_truncation(self, converter):
         """chars truncate_mode should use safe truncation."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.CODE_BLOCK_CONTENT,
             {"truncate_mode": "chars", "truncate_limit": 55},
         )
         fence_count = result.count("```")
         assert fence_count % 2 == 0
-        assert "[truncated...]" in result
+        assert "[truncated:" in result
 
     def test_tokens_mode_uses_safe_truncation(self, converter):
         """tokens truncate_mode should use safe truncation."""
         long_content = self.CODE_BLOCK_CONTENT * 10
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             long_content,
             {"truncate_mode": "tokens", "truncate_limit": 50},
         )
@@ -891,7 +900,7 @@ Fourth paragraph at the end."""
 
     def test_max_length_uses_safe_truncation(self, converter):
         """Legacy max_length should use safe truncation."""
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             self.CODE_BLOCK_CONTENT,
             {"max_length": 55},
         )
@@ -901,9 +910,122 @@ Fourth paragraph at the end."""
     def test_max_tokens_uses_safe_truncation(self, converter):
         """Legacy max_tokens should use safe truncation."""
         long_content = self.CODE_BLOCK_CONTENT * 10
-        result = converter._apply_options(
+        result, info = converter._apply_options(
             long_content,
             {"max_tokens": 50},
         )
         fence_count = result.count("```")
         assert fence_count % 2 == 0
+
+
+class TestTruncationMetadata:
+    """Tests for TruncationInfo metadata tracking."""
+
+    @pytest.fixture
+    def converter(self):
+        return DocumentConverter()
+
+    def test_no_truncation_info_default(self, converter):
+        """When no truncation occurs, info should have default values."""
+        content = "Short content"
+        result, info = converter._apply_options(content, None)
+
+        assert not info.was_truncated
+        assert info.original_length == len(content)
+        assert info.truncation_mode is None
+        assert info.original_tokens is None
+
+    def test_chars_mode_tracks_original_length(self, converter):
+        """Chars truncation should track original length."""
+        content = "A" * 100
+        result, info = converter._apply_options(
+            content, {"truncate_mode": "chars", "truncate_limit": 50}
+        )
+
+        assert info.was_truncated
+        assert info.original_length == 100
+        assert info.truncation_mode == "chars"
+        assert info.final_length < 100
+
+    def test_tokens_mode_tracks_original_tokens(self, converter):
+        """Tokens truncation should track original and final tokens."""
+        content = "word " * 500
+        result, info = converter._apply_options(
+            content, {"truncate_mode": "tokens", "truncate_limit": 50}
+        )
+
+        assert info.was_truncated
+        assert info.truncation_mode == "tokens"
+        assert info.original_tokens is not None
+        assert info.original_tokens > 50
+        assert info.final_tokens is not None
+        assert info.final_tokens < info.original_tokens
+
+    def test_sections_mode_tracks_truncation(self, converter):
+        """Sections truncation should set truncation_mode."""
+        content = "# Title\n\n## Section 1\n\nContent 1.\n\n## Section 2\n\nContent 2."
+        result, info = converter._apply_options(
+            content, {"truncate_mode": "sections", "truncate_limit": 1}
+        )
+
+        assert info.was_truncated
+        assert info.truncation_mode == "sections"
+
+    def test_paragraphs_mode_tracks_truncation(self, converter):
+        """Paragraphs truncation should set truncation_mode."""
+        content = "Para 1.\n\nPara 2.\n\nPara 3."
+        result, info = converter._apply_options(
+            content, {"truncate_mode": "paragraphs", "truncate_limit": 1}
+        )
+
+        assert info.was_truncated
+        assert info.truncation_mode == "paragraphs"
+
+    def test_indicator_includes_char_sizes(self, converter):
+        """Chars mode indicator should include original and final sizes."""
+        content = "A" * 100
+        result, info = converter._apply_options(
+            content, {"truncate_mode": "chars", "truncate_limit": 50}
+        )
+
+        assert "[truncated: 100 ->" in result
+        assert "chars]" in result
+
+    def test_indicator_includes_token_sizes(self, converter):
+        """Tokens mode indicator should include original and final token counts."""
+        content = "word " * 500
+        result, info = converter._apply_options(
+            content, {"truncate_mode": "tokens", "truncate_limit": 50}
+        )
+
+        assert "[truncated: ~" in result
+        assert "tokens]" in result
+
+    def test_no_truncation_preserves_content(self, converter):
+        """When content fits, no truncation should occur."""
+        content = "Short content"
+        result, info = converter._apply_options(
+            content, {"truncate_mode": "chars", "truncate_limit": 100}
+        )
+
+        assert not info.was_truncated
+        assert result == content
+        assert info.truncation_mode is None
+
+    def test_legacy_max_tokens_tracks_info(self, converter):
+        """Legacy max_tokens should also track truncation info."""
+        content = "word " * 500
+        result, info = converter._apply_options(content, {"max_tokens": 50})
+
+        assert info.was_truncated
+        assert info.truncation_mode == "tokens"
+        assert info.original_tokens is not None
+
+    def test_legacy_max_length_tracks_info(self, converter):
+        """Legacy max_length should also track truncation info."""
+        content = "A" * 100
+        result, info = converter._apply_options(content, {"max_length": 50})
+
+        assert info.was_truncated
+        assert info.truncation_mode == "chars"
+        assert info.original_length == 100

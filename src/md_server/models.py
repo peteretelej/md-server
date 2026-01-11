@@ -1,6 +1,19 @@
+from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Literal
 import uuid
+
+
+@dataclass
+class TruncationInfo:
+    """Tracks truncation details during processing."""
+
+    was_truncated: bool = False
+    original_length: int = 0
+    original_tokens: Optional[int] = None
+    truncation_mode: Optional[str] = None
+    final_length: int = 0
+    final_tokens: Optional[int] = None
 
 
 class ConversionOptions(BaseModel):
@@ -90,6 +103,17 @@ class ConversionMetadata(BaseModel):
     estimated_tokens: int = Field(default=0, description="Estimated token count")
     detected_language: Optional[str] = Field(
         default=None, description="ISO 639-1 language code"
+    )
+    was_truncated: bool = Field(default=False, description="Content was truncated")
+    original_length: Optional[int] = Field(
+        default=None, description="Original length before truncation (chars)"
+    )
+    original_tokens: Optional[int] = Field(
+        default=None, description="Original token count before truncation"
+    )
+    truncation_mode: Optional[str] = Field(
+        default=None,
+        description="How content was truncated (chars, tokens, sections, paragraphs)",
     )
 
 
