@@ -8,6 +8,70 @@ from md_server.metadata import (
     extract_title,
     format_frontmatter,
 )
+from md_server.metadata.extractor import clean_title
+
+
+class TestCleanTitle:
+    """Test markdown formatting removal from titles."""
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "input_title,expected",
+        [
+            # Links
+            ("[Link](https://example.com)", "Link"),
+            ("[Text](url) more", "Text more"),
+            (
+                "[Getting Started](https://example.com) - Guide",
+                "Getting Started - Guide",
+            ),
+            # Images
+            ("![alt text](https://example.com/img.png)", "alt text"),
+            ("![](https://example.com/img.png)", ""),
+            # Bold/Italic
+            ("**Bold**", "Bold"),
+            ("*Italic*", "Italic"),
+            ("***Both***", "Both"),
+            ("__Also Bold__", "Also Bold"),
+            ("_Also Italic_", "Also Italic"),
+            ("**Bold** and *italic*", "Bold and italic"),
+            # Code
+            ("`code`", "code"),
+            ("Use `func()` here", "Use func() here"),
+            # Headings
+            ("# Title", "Title"),
+            ("## Section", "Section"),
+            ("### Deep", "Deep"),
+            ("###### Very Deep", "Very Deep"),
+            # Combined patterns
+            ("**[Link](url)**", "Link"),
+            ("# *Welcome* to **Site**", "Welcome to Site"),
+            (
+                "[Getting Started](https://example.com) - **Guide**",
+                "Getting Started - Guide",
+            ),
+            # Edge cases
+            ("", ""),
+            (None, None),
+            ("Plain text", "Plain text"),
+            ("   Spaces   ", "Spaces"),
+            ("Multiple   spaces", "Multiple spaces"),
+        ],
+    )
+    def test_clean_title(self, input_title, expected):
+        assert clean_title(input_title) == expected
+
+    @pytest.mark.unit
+    def test_nested_formatting(self):
+        """Test deeply nested markdown patterns."""
+        assert clean_title("**[*text*](url)**") == "text"
+
+    @pytest.mark.unit
+    def test_preserves_non_markdown_special_chars(self):
+        """Test that non-markdown special characters are preserved."""
+        assert clean_title("Title: A & B") == "Title: A & B"
+        assert clean_title("Question?") == "Question?"
+        assert clean_title("Title (with parens)") == "Title (with parens)"
 
 
 class TestTokenEstimation:
@@ -129,6 +193,26 @@ class TestTitleExtraction:
     def test_h1_not_at_start(self):
         markdown = "Some intro text\n\n# The Title\n\nContent"
         assert extract_title(markdown) == "The Title"
+
+    @pytest.mark.unit
+    def test_title_with_link_is_cleaned(self):
+        markdown = "# [Getting Started](https://example.com)\n\nContent"
+        assert extract_title(markdown) == "Getting Started"
+
+    @pytest.mark.unit
+    def test_title_with_bold_is_cleaned(self):
+        markdown = "# **Important** Document\n\nContent"
+        assert extract_title(markdown) == "Important Document"
+
+    @pytest.mark.unit
+    def test_title_with_multiple_formatting(self):
+        markdown = "# [Link](url) - **Guide** for `beginners`\n\nContent"
+        assert extract_title(markdown) == "Link - Guide for beginners"
+
+    @pytest.mark.unit
+    def test_first_line_title_is_cleaned(self):
+        markdown = "**Bold First Line**\n\nMore content here."
+        assert extract_title(markdown) == "Bold First Line"
 
 
 class TestFrontmatter:

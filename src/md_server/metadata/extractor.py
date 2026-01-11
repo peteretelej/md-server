@@ -3,6 +3,40 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+def clean_title(title: Optional[str]) -> Optional[str]:
+    """
+    Remove markdown formatting from title to provide clean plain text.
+
+    Handles: links, images, bold, italic, inline code, heading prefixes.
+    """
+    if not title:
+        return title
+
+    # Remove image syntax: ![alt](url) -> alt (must come before links)
+    title = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", title)
+
+    # Remove link syntax: [text](url) -> text
+    title = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", title)
+
+    # Remove bold/italic (handle nested by running multiple times)
+    for _ in range(3):
+        title = re.sub(r"[*_]{1,3}([^*_]+)[*_]{1,3}", r"\1", title)
+
+    # Remove inline code: `code` -> code
+    title = re.sub(r"`([^`]+)`", r"\1", title)
+
+    # Remove any remaining stray backticks
+    title = title.replace("`", "")
+
+    # Remove heading prefixes: # Title -> Title
+    title = re.sub(r"^#{1,6}\s+", "", title)
+
+    # Collapse multiple spaces
+    title = re.sub(r"\s+", " ", title)
+
+    return title.strip()
+
+
 @dataclass
 class ExtractedMetadata:
     """Container for extracted metadata."""
@@ -74,11 +108,13 @@ def extract_title(markdown: str) -> Optional[str]:
     1. First H1 heading (# Title)
     2. First non-empty line if short enough to be a title
 
+    The extracted title is cleaned of markdown formatting.
+
     Args:
         markdown: Markdown content
 
     Returns:
-        Extracted title or None
+        Extracted title (plain text) or None
     """
     if not markdown:
         return None
@@ -87,7 +123,7 @@ def extract_title(markdown: str) -> Optional[str]:
     if h1_match:
         title = h1_match.group(1).strip()
         title = re.sub(r"\s*[#*_`]+\s*$", "", title)
-        return title if title else None
+        return clean_title(title) if title else None
 
     lines = markdown.strip().split("\n")
     for line in lines:
@@ -95,7 +131,7 @@ def extract_title(markdown: str) -> Optional[str]:
         if line and len(line) < 200:
             if line.startswith("```") or line.startswith("---"):
                 continue
-            return line
+            return clean_title(line)
 
     return None
 
