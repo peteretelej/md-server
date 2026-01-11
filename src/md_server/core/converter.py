@@ -373,6 +373,40 @@ class DocumentConverter:
         path = Path(filename)
         return StreamInfo(extension=path.suffix.lower(), filename=filename)
 
+    def _safe_truncate(self, markdown: str, target_length: int) -> tuple[str, bool]:
+        """
+        Truncate at safe markdown boundaries.
+
+        Avoids breaking inside code blocks or mid-paragraph when possible.
+
+        Args:
+            markdown: Content to truncate
+            target_length: Target character length
+
+        Returns:
+            Tuple of (truncated_content, was_truncated)
+        """
+        if len(markdown) <= target_length:
+            return markdown, False
+
+        truncated = markdown[:target_length]
+
+        # Rule 1: Don't break inside code blocks (odd fence count = unclosed)
+        fence_count = truncated.count("```")
+        if fence_count % 2 == 1:
+            last_fence = truncated.rfind("```")
+            truncated = truncated[:last_fence].rstrip()
+
+        # Rule 2: Prefer paragraph boundaries in final 30%
+        search_start = int(len(truncated) * 0.7)
+        if search_start > 0:
+            search_region = truncated[search_start:]
+            last_break = search_region.rfind("\n\n")
+            if last_break != -1:
+                truncated = truncated[: search_start + last_break]
+
+        return truncated.rstrip(), True
+
     def _apply_options(self, markdown: str, options: Optional[Dict[str, Any]]) -> str:
         if not options:
             return markdown
@@ -393,15 +427,17 @@ class DocumentConverter:
                 if current > limit:
                     ratio = limit / current
                     truncate_at = int(len(markdown) * ratio * 0.95)
-                    markdown = markdown[:truncate_at].rstrip()
-                    markdown += "\n\n[truncated...]"
+                    content, _ = self._safe_truncate(markdown, truncate_at)
+                    markdown = content + "\n\n[truncated...]"
             elif mode == "chars":
                 if len(markdown) > limit:
-                    markdown = markdown[:limit].rstrip() + "\n\n[truncated...]"
+                    content, _ = self._safe_truncate(markdown, limit)
+                    markdown = content + "\n\n[truncated...]"
         else:
             # Backwards compat: max_length still works
             if options.get("max_length") and len(markdown) > options["max_length"]:
-                markdown = markdown[: options["max_length"]] + "..."
+                content, _ = self._safe_truncate(markdown, options["max_length"])
+                markdown = content + "..."
 
             # Token-based truncation (legacy max_tokens)
             if options.get("max_tokens"):
@@ -410,8 +446,8 @@ class DocumentConverter:
                 if current > target:
                     ratio = target / current
                     truncate_at = int(len(markdown) * ratio * 0.95)
-                    markdown = markdown[:truncate_at].rstrip()
-                    markdown += "\n\n[truncated to fit token limit]"
+                    content, _ = self._safe_truncate(markdown, truncate_at)
+                    markdown = content + "\n\n[truncated to fit token limit]"
 
         return markdown
 

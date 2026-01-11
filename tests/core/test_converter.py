@@ -703,3 +703,207 @@ Fifth paragraph ends it."""
         # max_length uses "..." at the end, section mode uses "[truncated...]"
         assert "[truncated...]" in result
         assert not result.endswith("...")  # max_length ends with just "..."
+
+
+class TestSafeTruncation:
+    """Tests for markdown-aware safe truncation."""
+
+    @pytest.fixture
+    def converter(self):
+        return DocumentConverter()
+
+    # --- Code Block Safety Tests ---
+
+    CODE_BLOCK_CONTENT = """Some intro text.
+
+```python
+def example():
+    x = 1
+    y = 2
+    return x + y
+```
+
+After code block."""
+
+    @pytest.mark.parametrize(
+        "target_length",
+        [30, 50, 70],
+        ids=["short", "mid_block", "end_block"],
+    )
+    def test_code_block_not_split(self, converter, target_length):
+        """Code blocks should never be left unclosed after truncation."""
+        result, was_truncated = converter._safe_truncate(
+            self.CODE_BLOCK_CONTENT, target_length
+        )
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0, f"Unclosed code block: {fence_count} fences"
+
+    def test_code_block_complete_when_fits(self, converter):
+        """Complete code blocks should be preserved when they fit."""
+        result, was_truncated = converter._safe_truncate(self.CODE_BLOCK_CONTENT, 200)
+        assert "```python" in result
+        assert "return x + y" in result
+        fence_count = result.count("```")
+        assert fence_count == 2
+
+    def test_truncation_backs_up_before_unclosed_fence(self, converter):
+        """Truncation inside code block should back up to before the block."""
+        # Truncate right in the middle of the code block
+        result, was_truncated = converter._safe_truncate(self.CODE_BLOCK_CONTENT, 55)
+        assert was_truncated
+        # Should not contain partial code block
+        fence_count = result.count("```")
+        assert fence_count == 0, "Should back up to before code block"
+        assert "Some intro text" in result
+
+    def test_nested_code_blocks(self, converter):
+        """Multiple code blocks should all be handled correctly."""
+        content = """First block:
+
+```python
+code1
+```
+
+Second block:
+
+```javascript
+code2
+```
+
+End."""
+        # Truncate after first complete block
+        result, was_truncated = converter._safe_truncate(content, 60)
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0
+
+    def test_no_code_blocks(self, converter):
+        """Content without code blocks should truncate normally."""
+        content = "Paragraph one.\n\nParagraph two.\n\nParagraph three."
+        result, was_truncated = converter._safe_truncate(content, 30)
+        assert was_truncated
+        assert "```" not in result
+
+    def test_code_block_with_language_specifier(self, converter):
+        """Code blocks with language specifiers should work correctly."""
+        content = """Text.
+
+```typescript
+const x: number = 1;
+```
+
+More text."""
+        result, was_truncated = converter._safe_truncate(content, 40)
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0
+
+    # --- Paragraph Boundary Tests ---
+
+    PARAGRAPH_CONTENT = """First paragraph with some content here.
+
+Second paragraph with different content.
+
+Third paragraph is also here.
+
+Fourth paragraph at the end."""
+
+    def test_paragraph_boundary_preferred(self, converter):
+        """Truncation should prefer paragraph boundaries when possible."""
+        # Truncate in final 30% but with a paragraph break available
+        result, was_truncated = converter._safe_truncate(self.PARAGRAPH_CONTENT, 120)
+        assert was_truncated
+        # Should end cleanly (no partial paragraph)
+        assert result.rstrip() == result  # No trailing whitespace
+
+    def test_paragraph_boundary_in_final_30_percent(self, converter):
+        """Only look for boundaries in final 30% of content."""
+        content = "A" * 70 + "\n\n" + "B" * 30
+        # Target 80 chars - the \n\n is at position 70, which is in the final 30%
+        result, was_truncated = converter._safe_truncate(content, 80)
+        assert was_truncated
+        # Should truncate at the paragraph break
+        assert result == "A" * 70
+
+    def test_no_paragraph_boundary_available(self, converter):
+        """When no paragraph boundary in final 30%, truncate at limit."""
+        content = "A" * 100  # No paragraph breaks at all
+        result, was_truncated = converter._safe_truncate(content, 50)
+        assert was_truncated
+        assert len(result) == 50
+
+    # --- Edge Cases ---
+
+    def test_short_content_not_truncated(self, converter):
+        """Content under target length should not be truncated."""
+        content = "Short content"
+        result, was_truncated = converter._safe_truncate(content, 100)
+        assert not was_truncated
+        assert result == content
+
+    def test_exact_length_not_truncated(self, converter):
+        """Content exactly at target length should not be truncated."""
+        content = "A" * 50
+        result, was_truncated = converter._safe_truncate(content, 50)
+        assert not was_truncated
+        assert result == content
+
+    def test_empty_content(self, converter):
+        """Empty content should return empty without truncation."""
+        result, was_truncated = converter._safe_truncate("", 100)
+        assert not was_truncated
+        assert result == ""
+
+    def test_very_short_limit(self, converter):
+        """Very short limit should still produce valid output."""
+        content = "```python\ncode\n```"
+        result, was_truncated = converter._safe_truncate(content, 5)
+        assert was_truncated
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0
+
+    def test_whitespace_stripped(self, converter):
+        """Truncated content should have trailing whitespace stripped."""
+        content = "Text here.   \n\n   More text.   "
+        result, was_truncated = converter._safe_truncate(content, 20)
+        assert was_truncated
+        assert result == result.rstrip()
+
+    # --- Integration with _apply_options Tests ---
+
+    def test_chars_mode_uses_safe_truncation(self, converter):
+        """chars truncate_mode should use safe truncation."""
+        result = converter._apply_options(
+            self.CODE_BLOCK_CONTENT,
+            {"truncate_mode": "chars", "truncate_limit": 55},
+        )
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0
+        assert "[truncated...]" in result
+
+    def test_tokens_mode_uses_safe_truncation(self, converter):
+        """tokens truncate_mode should use safe truncation."""
+        long_content = self.CODE_BLOCK_CONTENT * 10
+        result = converter._apply_options(
+            long_content,
+            {"truncate_mode": "tokens", "truncate_limit": 50},
+        )
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0
+
+    def test_max_length_uses_safe_truncation(self, converter):
+        """Legacy max_length should use safe truncation."""
+        result = converter._apply_options(
+            self.CODE_BLOCK_CONTENT,
+            {"max_length": 55},
+        )
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0
+
+    def test_max_tokens_uses_safe_truncation(self, converter):
+        """Legacy max_tokens should use safe truncation."""
+        long_content = self.CODE_BLOCK_CONTENT * 10
+        result = converter._apply_options(
+            long_content,
+            {"max_tokens": 50},
+        )
+        fence_count = result.count("```")
+        assert fence_count % 2 == 0
