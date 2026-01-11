@@ -44,9 +44,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         arguments: Tool arguments
 
     Returns:
-        List of TextContent with JSON response
+        List of TextContent with response (raw markdown or JSON)
     """
     converter = get_converter()
+    output_format = arguments.get("output_format", "markdown")
 
     if name == "read_url":
         url = arguments.get("url")
@@ -57,6 +58,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 converter=converter,
                 url=url,
                 render_js=arguments.get("render_js", False),
+                output_format=output_format,
             )
 
     elif name == "read_file":
@@ -79,10 +81,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     converter=converter,
                     content=content,
                     filename=filename,
+                    output_format=output_format,
                 )
     else:
         result = unknown_tool_error(name)
 
+    # Return raw markdown string or JSON-serialized response
+    if isinstance(result, str):
+        return [TextContent(type="text", text=result)]
     return [TextContent(type="text", text=result.model_dump_json())]
 
 

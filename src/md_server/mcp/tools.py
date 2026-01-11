@@ -37,6 +37,15 @@ This adds ~15-30 seconds but captures dynamically loaded content.""",
                     "Slower but more complete."
                 ),
             },
+            "output_format": {
+                "type": "string",
+                "enum": ["markdown", "json"],
+                "default": "markdown",
+                "description": (
+                    "Output format: markdown (default) returns raw markdown, "
+                    "json returns structured response with metadata."
+                ),
+            },
         },
     },
 )
@@ -73,6 +82,15 @@ Returns structured JSON with:
                 "description": (
                     "Filename with extension (e.g., 'report.pdf', 'chart.png'). "
                     "Used to determine processing method."
+                ),
+            },
+            "output_format": {
+                "type": "string",
+                "enum": ["markdown", "json"],
+                "default": "markdown",
+                "description": (
+                    "Output format: markdown (default) returns raw markdown, "
+                    "json returns structured response with metadata."
                 ),
             },
         },

@@ -42,12 +42,96 @@ class TestHandleReadUrl:
     """Tests for handle_read_url handler."""
 
     @pytest.mark.asyncio
-    async def test_success(self, mock_converter, mock_conversion_result):
-        """Should return success response for valid URL."""
+    async def test_success_default_markdown(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should return raw markdown by default."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
         result = await handle_read_url(
             mock_converter, "https://example.com", render_js=False
+        )
+
+        assert isinstance(result, str)
+        assert "# Title" in result
+
+    @pytest.mark.asyncio
+    async def test_success_explicit_markdown(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should return raw markdown when output_format=markdown."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        result = await handle_read_url(
+            mock_converter,
+            "https://example.com",
+            render_js=False,
+            output_format="markdown",
+        )
+
+        assert isinstance(result, str)
+        assert "# Title" in result
+
+    @pytest.mark.asyncio
+    async def test_success_json_format(self, mock_converter, mock_conversion_result):
+        """Should return MCPSuccessResponse when output_format=json."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        result = await handle_read_url(
+            mock_converter,
+            "https://example.com",
+            render_js=False,
+            output_format="json",
+        )
+
+        assert isinstance(result, MCPSuccessResponse)
+        assert result.success is True
+        assert result.title == "Test Title"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "output_format,expected_type",
+        [
+            ("markdown", str),
+            ("json", MCPSuccessResponse),
+            (None, str),  # default should be markdown (handled by default param)
+        ],
+        ids=["markdown", "json", "default"],
+    )
+    async def test_output_format_types(
+        self, mock_converter, mock_conversion_result, output_format, expected_type
+    ):
+        """Should return correct type based on output_format."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        kwargs = {"render_js": False}
+        if output_format is not None:
+            kwargs["output_format"] = output_format
+
+        result = await handle_read_url(mock_converter, "https://example.com", **kwargs)
+
+        assert isinstance(result, expected_type)
+
+    @pytest.mark.asyncio
+    async def test_error_always_json(self, mock_converter):
+        """Error responses should always be JSON regardless of output_format."""
+        result = await handle_read_url(
+            mock_converter,
+            "invalid-url",
+            render_js=False,
+            output_format="markdown",
+        )
+
+        assert isinstance(result, MCPErrorResponse)
+        assert result.error.code == ErrorCode.INVALID_URL
+
+    @pytest.mark.asyncio
+    async def test_success(self, mock_converter, mock_conversion_result):
+        """Should return success response for valid URL (JSON format)."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        result = await handle_read_url(
+            mock_converter, "https://example.com", render_js=False, output_format="json"
         )
 
         assert isinstance(result, MCPSuccessResponse)
@@ -130,10 +214,12 @@ class TestHandleReadUrl:
 
     @pytest.mark.asyncio
     async def test_word_count_calculated(self, mock_converter, mock_conversion_result):
-        """Should calculate word count from content."""
+        """Should calculate word count from content (JSON format)."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_url(mock_converter, "https://example.com")
+        result = await handle_read_url(
+            mock_converter, "https://example.com", output_format="json"
+        )
 
         assert isinstance(result, MCPSuccessResponse)
         assert result.word_count > 0
@@ -196,12 +282,100 @@ class TestHandleReadFile:
     """Tests for handle_read_file handler."""
 
     @pytest.mark.asyncio
-    async def test_success_pdf(self, mock_converter, mock_conversion_result):
-        """Should return success for PDF conversion."""
+    async def test_success_default_markdown(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should return raw markdown by default."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
         result = await handle_read_file(
             mock_converter, b"fake pdf content", "report.pdf"
+        )
+
+        assert isinstance(result, str)
+        assert "# Title" in result
+
+    @pytest.mark.asyncio
+    async def test_success_explicit_markdown(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should return raw markdown when output_format=markdown."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        result = await handle_read_file(
+            mock_converter,
+            b"fake pdf content",
+            "report.pdf",
+            output_format="markdown",
+        )
+
+        assert isinstance(result, str)
+        assert "# Title" in result
+
+    @pytest.mark.asyncio
+    async def test_success_json_format(self, mock_converter, mock_conversion_result):
+        """Should return MCPSuccessResponse when output_format=json."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        result = await handle_read_file(
+            mock_converter,
+            b"fake pdf content",
+            "report.pdf",
+            output_format="json",
+        )
+
+        assert isinstance(result, MCPSuccessResponse)
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "output_format,expected_type",
+        [
+            ("markdown", str),
+            ("json", MCPSuccessResponse),
+            (None, str),  # default should be markdown
+        ],
+        ids=["markdown", "json", "default"],
+    )
+    async def test_output_format_types(
+        self, mock_converter, mock_conversion_result, output_format, expected_type
+    ):
+        """Should return correct type based on output_format."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        kwargs = {}
+        if output_format is not None:
+            kwargs["output_format"] = output_format
+
+        result = await handle_read_file(
+            mock_converter, b"fake content", "file.pdf", **kwargs
+        )
+
+        assert isinstance(result, expected_type)
+
+    @pytest.mark.asyncio
+    async def test_error_always_json(self, mock_converter):
+        """Error responses should always be JSON regardless of output_format."""
+        mock_converter.max_file_size_mb = 1
+        large_content = b"x" * (2 * 1024 * 1024)  # 2MB
+
+        result = await handle_read_file(
+            mock_converter,
+            large_content,
+            "large.pdf",
+            output_format="markdown",
+        )
+
+        assert isinstance(result, MCPErrorResponse)
+        assert result.error.code == ErrorCode.FILE_TOO_LARGE
+
+    @pytest.mark.asyncio
+    async def test_success_pdf(self, mock_converter, mock_conversion_result):
+        """Should return success for PDF conversion (JSON format)."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        result = await handle_read_file(
+            mock_converter, b"fake pdf content", "report.pdf", output_format="json"
         )
 
         assert isinstance(result, MCPSuccessResponse)
@@ -284,20 +458,24 @@ class TestHandleReadFile:
     async def test_ocr_applied_in_metadata(
         self, mock_converter, mock_conversion_result
     ):
-        """Should set ocr_applied in metadata for images."""
+        """Should set ocr_applied in metadata for images (JSON format)."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_file(mock_converter, b"image", "photo.png")
+        result = await handle_read_file(
+            mock_converter, b"image", "photo.png", output_format="json"
+        )
 
         assert isinstance(result, MCPSuccessResponse)
         assert result.metadata.ocr_applied is True
 
     @pytest.mark.asyncio
     async def test_source_is_filename(self, mock_converter, mock_conversion_result):
-        """Should use filename as source."""
+        """Should use filename as source (JSON format)."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_file(mock_converter, b"data", "myfile.pdf")
+        result = await handle_read_file(
+            mock_converter, b"data", "myfile.pdf", output_format="json"
+        )
 
         assert isinstance(result, MCPSuccessResponse)
         assert result.source == "myfile.pdf"

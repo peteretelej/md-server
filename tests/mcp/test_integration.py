@@ -24,7 +24,7 @@ class TestMCPServerIntegration:
 
     @pytest.mark.asyncio
     async def test_call_read_url_success(self):
-        """call_tool should handle read_url successfully."""
+        """call_tool should handle read_url successfully with JSON format."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
@@ -41,7 +41,10 @@ class TestMCPServerIntegration:
             )
             mock_get.return_value = mock_conv
 
-            result = await call_tool("read_url", {"url": "https://example.com"})
+            result = await call_tool(
+                "read_url",
+                {"url": "https://example.com", "output_format": "json"},
+            )
 
             assert len(result) == 1
             data = json.loads(result[0].text)
@@ -84,7 +87,7 @@ class TestMCPServerIntegration:
 
     @pytest.mark.asyncio
     async def test_call_read_file_success(self):
-        """call_tool should handle read_file successfully."""
+        """call_tool should handle read_file successfully with JSON format."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
@@ -104,7 +107,12 @@ class TestMCPServerIntegration:
 
             content_b64 = base64.b64encode(b"fake pdf data").decode()
             result = await call_tool(
-                "read_file", {"content": content_b64, "filename": "test.pdf"}
+                "read_file",
+                {
+                    "content": content_b64,
+                    "filename": "test.pdf",
+                    "output_format": "json",
+                },
             )
 
             data = json.loads(result[0].text)
@@ -180,7 +188,7 @@ class TestMCPResponseFormat:
 
     @pytest.mark.asyncio
     async def test_success_response_structure(self):
-        """Success responses should have consistent structure."""
+        """Success responses (JSON format) should have consistent structure."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
@@ -194,7 +202,10 @@ class TestMCPResponseFormat:
             )
             mock_get.return_value = mock_conv
 
-            result = await call_tool("read_url", {"url": "https://example.com"})
+            result = await call_tool(
+                "read_url",
+                {"url": "https://example.com", "output_format": "json"},
+            )
 
             data = json.loads(result[0].text)
             # Check required fields

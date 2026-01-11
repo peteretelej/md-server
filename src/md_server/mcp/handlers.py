@@ -39,7 +39,8 @@ async def handle_read_url(
     converter: DocumentConverter,
     url: str,
     render_js: bool = False,
-) -> Union[MCPSuccessResponse, MCPErrorResponse]:
+    output_format: str = "markdown",
+) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
     """
     Handle read_url tool call.
 
@@ -47,9 +48,12 @@ async def handle_read_url(
         converter: DocumentConverter instance
         url: URL to fetch and convert
         render_js: Whether to render JavaScript before extraction
+        output_format: Output format - "markdown" (default) or "json"
 
     Returns:
-        MCPSuccessResponse on success, MCPErrorResponse on failure
+        Raw markdown string when output_format="markdown",
+        MCPSuccessResponse when output_format="json",
+        MCPErrorResponse on failure (always JSON)
     """
     # Validate URL format
     if not url.startswith(("http://", "https://")):
@@ -68,6 +72,11 @@ async def handle_read_url(
         if word_count < MIN_WORD_COUNT:
             return content_empty_error(url, tried_js=render_js)
 
+        # Return raw markdown by default
+        if output_format == "markdown":
+            return result.markdown
+
+        # Return structured JSON response
         return MCPSuccessResponse(
             title=result.metadata.title or _extract_title_from_url(url),
             content=result.markdown,
@@ -111,7 +120,8 @@ async def handle_read_file(
     converter: DocumentConverter,
     content: bytes,
     filename: str,
-) -> Union[MCPSuccessResponse, MCPErrorResponse]:
+    output_format: str = "markdown",
+) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
     """
     Handle read_file tool call.
 
@@ -119,9 +129,12 @@ async def handle_read_file(
         converter: DocumentConverter instance
         content: File content as bytes
         filename: Original filename with extension
+        output_format: Output format - "markdown" (default) or "json"
 
     Returns:
-        MCPSuccessResponse on success, MCPErrorResponse on failure
+        Raw markdown string when output_format="markdown",
+        MCPSuccessResponse when output_format="json",
+        MCPErrorResponse on failure (always JSON)
     """
     ext = os.path.splitext(filename)[1].lower()
     is_image = ext in IMAGE_EXTENSIONS
@@ -139,6 +152,11 @@ async def handle_read_file(
             ocr_enabled=is_image,  # Auto-enable OCR for images
         )
 
+        # Return raw markdown by default
+        if output_format == "markdown":
+            return result.markdown
+
+        # Return structured JSON response
         word_count = len(result.markdown.split())
         mime_type, _ = mimetypes.guess_type(filename)
 
