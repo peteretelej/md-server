@@ -460,3 +460,246 @@ class TestTokenTruncation:
         # max_length truncates first, then max_tokens
         assert len(result) <= 100  # max_length 50 + "..." + token truncation indicator
         assert "..." in result or "[truncated" in result
+
+
+class TestStructuralTruncation:
+    """Tests for structural truncation modes (sections, paragraphs)."""
+
+    @pytest.fixture
+    def converter(self):
+        return DocumentConverter()
+
+    # Sample content with sections for testing
+    SECTION_CONTENT = """# Title
+
+Intro paragraph.
+
+## Section 1
+
+Content 1.
+
+## Section 2
+
+Content 2.
+
+## Section 3
+
+Content 3."""
+
+    # Sample content with paragraphs
+    PARAGRAPH_CONTENT = """First paragraph with some content.
+
+Second paragraph with more content.
+
+Third paragraph continues.
+
+Fourth paragraph here.
+
+Fifth paragraph ends it."""
+
+    # --- Sections Mode Tests ---
+
+    @pytest.mark.parametrize(
+        "limit,expected_sections",
+        [
+            (1, 1),  # Intro + Section 1
+            (2, 2),  # Intro + Section 1 + Section 2
+            (3, 3),  # Intro + Section 1 + Section 2 + Section 3
+            (5, 3),  # Only 3 sections exist
+        ],
+        ids=["limit_1", "limit_2", "limit_3", "limit_exceeds"],
+    )
+    def test_sections_mode_truncation(self, converter, limit, expected_sections):
+        """Test sections mode truncates to correct number of sections."""
+        result = converter._apply_options(
+            self.SECTION_CONTENT,
+            {"truncate_mode": "sections", "truncate_limit": limit},
+        )
+        actual_sections = result.count("## ")
+        assert actual_sections == expected_sections
+
+    def test_sections_mode_includes_intro(self, converter):
+        """Sections mode should include content before first ## heading."""
+        result = converter._apply_options(
+            self.SECTION_CONTENT,
+            {"truncate_mode": "sections", "truncate_limit": 1},
+        )
+        assert "# Title" in result
+        assert "Intro paragraph" in result
+        assert "## Section 1" in result
+
+    def test_sections_mode_no_sections(self, converter):
+        """Content without ## headings should return full content."""
+        no_sections = "Just some text\n\nwith paragraphs\n\nbut no sections."
+        result = converter._apply_options(
+            no_sections,
+            {"truncate_mode": "sections", "truncate_limit": 2},
+        )
+        assert result == no_sections
+        assert "[truncated" not in result
+
+    def test_sections_mode_adds_truncation_indicator(self, converter):
+        """Sections mode should add truncation indicator when truncating."""
+        result = converter._apply_options(
+            self.SECTION_CONTENT,
+            {"truncate_mode": "sections", "truncate_limit": 1},
+        )
+        assert "[truncated...]" in result
+
+    def test_sections_mode_no_indicator_when_not_truncated(self, converter):
+        """No truncation indicator when all sections fit."""
+        result = converter._apply_options(
+            self.SECTION_CONTENT,
+            {"truncate_mode": "sections", "truncate_limit": 10},
+        )
+        assert "[truncated" not in result
+
+    # --- Paragraphs Mode Tests ---
+
+    @pytest.mark.parametrize(
+        "limit,expected_paragraphs",
+        [
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (5, 5),
+            (10, 5),  # Only 5 paragraphs exist
+        ],
+        ids=["limit_1", "limit_2", "limit_3", "limit_5", "limit_exceeds"],
+    )
+    def test_paragraphs_mode_truncation(self, converter, limit, expected_paragraphs):
+        """Test paragraphs mode truncates to correct number of paragraphs."""
+        result = converter._apply_options(
+            self.PARAGRAPH_CONTENT,
+            {"truncate_mode": "paragraphs", "truncate_limit": limit},
+        )
+        # Count paragraphs by splitting on double newlines
+        # (minus 1 if truncation indicator is present)
+        parts = result.split("\n\n")
+        actual = len([p for p in parts if p.strip() and p.strip() != "[truncated...]"])
+        assert actual == expected_paragraphs
+
+    def test_paragraphs_mode_single_paragraph(self, converter):
+        """Single paragraph content should return full content."""
+        single = "Just one paragraph without any breaks."
+        result = converter._apply_options(
+            single,
+            {"truncate_mode": "paragraphs", "truncate_limit": 2},
+        )
+        assert result == single
+        assert "[truncated" not in result
+
+    def test_paragraphs_mode_adds_truncation_indicator(self, converter):
+        """Paragraphs mode should add truncation indicator when truncating."""
+        result = converter._apply_options(
+            self.PARAGRAPH_CONTENT,
+            {"truncate_mode": "paragraphs", "truncate_limit": 2},
+        )
+        assert "[truncated...]" in result
+
+    def test_paragraphs_mode_no_indicator_when_not_truncated(self, converter):
+        """No truncation indicator when all paragraphs fit."""
+        result = converter._apply_options(
+            self.PARAGRAPH_CONTENT,
+            {"truncate_mode": "paragraphs", "truncate_limit": 10},
+        )
+        assert "[truncated" not in result
+
+    # --- Chars Mode Tests ---
+
+    def test_chars_mode_truncation(self, converter):
+        """Test chars mode truncates to character limit."""
+        content = "A" * 100
+        result = converter._apply_options(
+            content,
+            {"truncate_mode": "chars", "truncate_limit": 50},
+        )
+        # Should be 50 chars + truncation indicator
+        assert result.startswith("A" * 50)
+        assert "[truncated...]" in result
+
+    def test_chars_mode_no_truncation_under_limit(self, converter):
+        """Chars mode should not truncate when under limit."""
+        content = "Short content"
+        result = converter._apply_options(
+            content,
+            {"truncate_mode": "chars", "truncate_limit": 100},
+        )
+        assert result == content
+        assert "[truncated" not in result
+
+    # --- Tokens Mode Tests ---
+
+    def test_tokens_mode_truncation(self, converter):
+        """Test tokens mode truncates to token limit via truncate_mode."""
+        content = "word " * 1000
+        result = converter._apply_options(
+            content,
+            {"truncate_mode": "tokens", "truncate_limit": 50},
+        )
+        assert "[truncated...]" in result
+
+    def test_tokens_mode_no_truncation_under_limit(self, converter):
+        """Tokens mode should not truncate when under limit."""
+        content = "Short content"
+        result = converter._apply_options(
+            content,
+            {"truncate_mode": "tokens", "truncate_limit": 100},
+        )
+        assert result == content
+        assert "[truncated" not in result
+
+    # --- Edge Cases ---
+
+    def test_empty_content(self, converter):
+        """Empty content should return empty string."""
+        result = converter._apply_options(
+            "",
+            {"truncate_mode": "sections", "truncate_limit": 5},
+        )
+        assert result == ""
+
+    def test_mode_without_limit(self, converter):
+        """Mode without limit should not truncate."""
+        result = converter._apply_options(
+            self.SECTION_CONTENT,
+            {"truncate_mode": "sections"},
+        )
+        assert result == self.SECTION_CONTENT
+
+    def test_limit_without_mode(self, converter):
+        """Limit without mode should not truncate."""
+        result = converter._apply_options(
+            self.SECTION_CONTENT,
+            {"truncate_limit": 2},
+        )
+        assert result == self.SECTION_CONTENT
+
+    def test_backwards_compat_max_length(self, converter):
+        """max_length should still work for backwards compatibility."""
+        content = "A" * 100
+        result = converter._apply_options(content, {"max_length": 20})
+        assert result == "A" * 20 + "..."
+
+    def test_backwards_compat_max_tokens(self, converter):
+        """max_tokens should still work for backwards compatibility."""
+        content = "word " * 1000
+        result = converter._apply_options(content, {"max_tokens": 50})
+        assert "[truncated to fit token limit]" in result
+
+    def test_truncate_mode_overrides_max_length(self, converter):
+        """truncate_mode should take precedence over max_length/max_tokens."""
+        content = self.SECTION_CONTENT
+        result = converter._apply_options(
+            content,
+            {
+                "truncate_mode": "sections",
+                "truncate_limit": 1,
+                "max_length": 10,  # Should be ignored
+            },
+        )
+        # Should have section truncation, not character truncation
+        assert "## Section 1" in result
+        # max_length uses "..." at the end, section mode uses "[truncated...]"
+        assert "[truncated...]" in result
+        assert not result.endswith("...")  # max_length ends with just "..."

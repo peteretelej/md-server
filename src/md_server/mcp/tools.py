@@ -45,6 +45,21 @@ This adds ~15-30 seconds but captures dynamically loaded content.""",
                 "type": "integer",
                 "description": "Maximum tokens to return (uses tiktoken cl100k_base encoding).",
             },
+            "truncate_mode": {
+                "type": "string",
+                "enum": ["chars", "tokens", "sections", "paragraphs"],
+                "description": (
+                    "Truncation mode: chars (character limit), tokens (token limit), "
+                    "sections (first N ## headings), paragraphs (first N paragraphs)."
+                ),
+            },
+            "truncate_limit": {
+                "type": "integer",
+                "description": (
+                    "Limit for truncation mode (character count, token count, "
+                    "section count, or paragraph count)."
+                ),
+            },
             "timeout": {
                 "type": "integer",
                 "description": "Timeout in seconds for the conversion operation.",
@@ -108,6 +123,21 @@ Returns structured JSON with:
             "max_tokens": {
                 "type": "integer",
                 "description": "Maximum tokens to return (uses tiktoken cl100k_base encoding).",
+            },
+            "truncate_mode": {
+                "type": "string",
+                "enum": ["chars", "tokens", "sections", "paragraphs"],
+                "description": (
+                    "Truncation mode: chars (character limit), tokens (token limit), "
+                    "sections (first N ## headings), paragraphs (first N paragraphs)."
+                ),
+            },
+            "truncate_limit": {
+                "type": "integer",
+                "description": (
+                    "Limit for truncation mode (character count, token count, "
+                    "section count, or paragraph count)."
+                ),
             },
             "timeout": {
                 "type": "integer",

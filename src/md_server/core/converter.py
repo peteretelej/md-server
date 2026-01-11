@@ -380,20 +380,58 @@ class DocumentConverter:
         if options.get("clean_markdown", self.clean_markdown):
             markdown = self._clean_markdown(markdown)
 
-        if options.get("max_length") and len(markdown) > options["max_length"]:
-            markdown = markdown[: options["max_length"]] + "..."
+        # New truncation modes (truncate_mode + truncate_limit)
+        mode = options.get("truncate_mode")
+        limit = options.get("truncate_limit")
+        if mode and limit:
+            if mode == "sections":
+                markdown = self._truncate_by_sections(markdown, limit)
+            elif mode == "paragraphs":
+                markdown = self._truncate_by_paragraphs(markdown, limit)
+            elif mode == "tokens":
+                current = estimate_tokens(markdown)
+                if current > limit:
+                    ratio = limit / current
+                    truncate_at = int(len(markdown) * ratio * 0.95)
+                    markdown = markdown[:truncate_at].rstrip()
+                    markdown += "\n\n[truncated...]"
+            elif mode == "chars":
+                if len(markdown) > limit:
+                    markdown = markdown[:limit].rstrip() + "\n\n[truncated...]"
+        else:
+            # Backwards compat: max_length still works
+            if options.get("max_length") and len(markdown) > options["max_length"]:
+                markdown = markdown[: options["max_length"]] + "..."
 
-        # Token-based truncation
-        if options.get("max_tokens"):
-            target = options["max_tokens"]
-            current = estimate_tokens(markdown)
-            if current > target:
-                ratio = target / current
-                truncate_at = int(len(markdown) * ratio * 0.95)
-                markdown = markdown[:truncate_at].rstrip()
-                markdown += "\n\n[truncated to fit token limit]"
+            # Token-based truncation (legacy max_tokens)
+            if options.get("max_tokens"):
+                target = options["max_tokens"]
+                current = estimate_tokens(markdown)
+                if current > target:
+                    ratio = target / current
+                    truncate_at = int(len(markdown) * ratio * 0.95)
+                    markdown = markdown[:truncate_at].rstrip()
+                    markdown += "\n\n[truncated to fit token limit]"
 
         return markdown
+
+    def _truncate_by_sections(self, markdown: str, limit: int) -> str:
+        """Return first N markdown sections (split by ## headings)."""
+        import re
+
+        parts = re.split(r"\n(?=## )", markdown)
+        if len(parts) <= limit + 1:  # +1 for content before first ##
+            return markdown
+        result = "\n".join(parts[: limit + 1])
+        return result.rstrip() + "\n\n[truncated...]"
+
+    def _truncate_by_paragraphs(self, markdown: str, limit: int) -> str:
+        """Return first N paragraphs (split by blank lines)."""
+        parts = markdown.split("\n\n")
+        if len(parts) <= limit:
+            return markdown
+        result = "\n\n".join(parts[:limit])
+        return result.rstrip() + "\n\n[truncated...]"
 
     def _detect_format(self, content: bytes, filename: Optional[str] = None) -> str:
         format_map = {

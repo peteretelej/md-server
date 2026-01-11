@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 import uuid
 
 
@@ -24,6 +24,17 @@ class ConversionOptions(BaseModel):
         default=None,
         gt=0,
         description="Maximum tokens to return (uses tiktoken cl100k_base encoding)",
+    )
+    truncate_mode: Optional[Literal["chars", "tokens", "sections", "paragraphs"]] = (
+        Field(
+            default=None,
+            description="Truncation mode: chars, tokens, sections (## headings), paragraphs",
+        )
+    )
+    truncate_limit: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Limit for truncation mode (chars, tokens, section count, or paragraph count)",
     )
     clean_markdown: Optional[bool] = Field(
         default=False, description="Normalize/clean markdown output"
