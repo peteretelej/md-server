@@ -13,12 +13,14 @@ md-server converts files, URLs, or raw content into markdown. It automatically d
 
 **Two ways to use it:**
 
-- **HTTP API** — Run as a server for any application
-- **MCP Server** — Direct integration with AI tools (Claude Desktop, Cursor, custom agents)
+- **[HTTP API](#http-api)** — REST API to convert documents and websites to markdown
+- **[MCP Server](#mcp-server-for-ai-assistants)** — Local MCP Server for integration with AI tools (OpenCode, Claude Desktop, Cursor, custom agents)
 
 Under the hood, it uses Microsoft's MarkItDown for document conversion and Crawl4AI for intelligent web scraping.
 
-## Quick Start
+## HTTP API
+
+**Prerequisite:** Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first.
 
 ```bash
 # Starts server at localhost:8080
@@ -41,6 +43,8 @@ curl -X POST localhost:8080/convert \
 ## MCP Server for AI Assistants
 
 md-server runs as a local [MCP server](https://modelcontextprotocol.io), giving AI assistants like Claude Desktop, Cursor, Copilot, and OpenCode the ability to read documents and web pages directly.
+
+**Prerequisite:** Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first.
 
 Add to your MCP configuration:
 
