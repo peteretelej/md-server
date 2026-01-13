@@ -190,11 +190,11 @@ curl localhost:8080/health
 
 ## Supported Formats
 
-**Documents**: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP  
-**Web**: HTML, URLs (with JavaScript rendering)  
-**Images**: PNG, JPG, JPEG (with OCR)  
-**Audio**: MP3, WAV (transcription)  
-**Video**: YouTube URLs  
+**Documents**: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP
+**Web**: HTML, URLs (with JavaScript rendering)
+**Images**: PNG, JPG, JPEG (with OCR)
+**Audio**: MP3, WAV (transcription) — requires [ffmpeg](https://ffmpeg.org/download.html)
+**Video**: YouTube URLs
 **Text**: TXT, MD, CSV, XML, JSON
 
 ## Advanced Usage

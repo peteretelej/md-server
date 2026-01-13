@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 import time
 from io import BytesIO
 from pathlib import Path
@@ -17,6 +18,14 @@ from ..models import ConversionResult, ConversionMetadata
 from ..security import validate_url
 
 logger = get_logger("core.converter")
+
+# Audio MIME types that require ffmpeg
+AUDIO_MIME_TYPES = {"audio/wav", "audio/mp3", "audio/mpeg"}
+
+
+def _is_ffmpeg_available() -> bool:
+    """Check if ffmpeg is available on the system."""
+    return shutil.which("ffmpeg") is not None or shutil.which("avconv") is not None
 
 
 class DocumentConverter:
@@ -318,6 +327,14 @@ class DocumentConverter:
         filename: Optional[str] = None,
         options: Optional[Dict[str, Any]] = None,
     ) -> str:
+        # Check if this is audio content that requires ffmpeg
+        detected_format = self._detect_format(content, filename)
+        if detected_format in AUDIO_MIME_TYPES and not _is_ffmpeg_available():
+            raise ConversionError(
+                "Audio transcription requires ffmpeg. "
+                "Install it from https://ffmpeg.org/download.html"
+            )
+
         stream_info = self._create_stream_info_for_content(filename)
 
         with BytesIO(content) as stream:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-server"
-version = "0.1.5"
+version = "0.1.6"
 description = "HTTP API server for converting documents, web pages, and media to markdown"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -80,6 +80,7 @@ markers = [
 filterwarnings = [
     "ignore::DeprecationWarning:pydantic._internal._config",
     "ignore::pytest.PytestCollectionWarning",
+    "ignore:Couldn't find ffmpeg or avconv:RuntimeWarning:pydub.utils",
 ]
 
 [tool.coverage.run]

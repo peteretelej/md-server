@@ -52,7 +52,7 @@ class TestAPIKeyMiddleware:
     async def test_authentication_success_with_valid_key(self):
         """Test successful Bearer token authentication"""
         settings = Settings(api_key="valid-key-123")
-        middleware = APIKeyMiddleware(Mock(spec=ASGIApp))
+        middleware = APIKeyMiddleware(Mock(spec=ASGIApp), exclude_paths={"/test"})
 
         connection = self.create_mock_connection(
             headers={"authorization": "Bearer valid-key-123"}, settings=settings
@@ -66,7 +66,7 @@ class TestAPIKeyMiddleware:
     async def test_authentication_bypassed_when_no_api_key_configured(self):
         """Test authentication bypass when no API key in settings"""
         settings = Settings()  # No api_key set
-        middleware = APIKeyMiddleware(Mock(spec=ASGIApp))
+        middleware = APIKeyMiddleware(Mock(spec=ASGIApp), exclude_paths={"/test"})
 
         connection = self.create_mock_connection(settings=settings)
 
@@ -78,7 +78,7 @@ class TestAPIKeyMiddleware:
     async def test_authentication_failure_missing_header(self):
         """Test missing Authorization header"""
         settings = Settings(api_key="test-key")
-        middleware = APIKeyMiddleware(Mock(spec=ASGIApp))
+        middleware = APIKeyMiddleware(Mock(spec=ASGIApp), exclude_paths={"/test"})
 
         connection = self.create_mock_connection(
             headers={},  # No authorization header
@@ -93,7 +93,7 @@ class TestAPIKeyMiddleware:
     async def test_authentication_failure_invalid_format(self):
         """Test invalid Authorization header format"""
         settings = Settings(api_key="test-key")
-        middleware = APIKeyMiddleware(Mock(spec=ASGIApp))
+        middleware = APIKeyMiddleware(Mock(spec=ASGIApp), exclude_paths={"/test"})
 
         connection = self.create_mock_connection(
             headers={"authorization": "Basic invalid-format"}, settings=settings
@@ -107,7 +107,7 @@ class TestAPIKeyMiddleware:
     async def test_authentication_failure_wrong_key(self):
         """Test wrong API key"""
         settings = Settings(api_key="correct-key")
-        middleware = APIKeyMiddleware(Mock(spec=ASGIApp))
+        middleware = APIKeyMiddleware(Mock(spec=ASGIApp), exclude_paths={"/test"})
 
         connection = self.create_mock_connection(
             headers={"authorization": "Bearer wrong-key"}, settings=settings
@@ -121,7 +121,7 @@ class TestAPIKeyMiddleware:
     async def test_authentication_failure_empty_bearer_token(self):
         """Test empty Bearer token"""
         settings = Settings(api_key="test-key")
-        middleware = APIKeyMiddleware(Mock(spec=ASGIApp))
+        middleware = APIKeyMiddleware(Mock(spec=ASGIApp), exclude_paths={"/test"})
 
         connection = self.create_mock_connection(
             headers={"authorization": "Bearer "}, settings=settings
