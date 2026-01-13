@@ -12,6 +12,7 @@
 md-server converts files, URLs, or raw content into markdown. It automatically detects input types, handles everything from PDFs and Office documents, YouTube videos, images, to web pages with JavaScript rendering, and requires zero configuration to get started.
 
 **Two ways to use it:**
+
 - **HTTP API** — Run as a server for any application
 - **MCP Server** — Direct integration with AI tools (Claude Desktop, Cursor, custom agents)
 
@@ -37,17 +38,11 @@ curl -X POST localhost:8080/convert \
   -d '{"text": "<h1>Title</h1><p>Content</p>", "mime_type": "text/html"}'
 ```
 
-## AI Integration (MCP)
+## MCP Server for AI Assistants
 
-md-server works directly with AI tools via [Model Context Protocol (MCP)](https://modelcontextprotocol.io). This lets Claude Desktop, Cursor, and other AI tools read documents and web pages without any HTTP setup.
-
-### Claude Desktop / Cursor
+md-server runs as a local [MCP server](https://modelcontextprotocol.io), giving AI assistants like Claude Desktop, Cursor, Copilot, and OpenCode the ability to read documents and web pages directly.
 
 Add to your MCP configuration:
-
-**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Linux:** `~/.config/Claude/claude_desktop_config.json`
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
@@ -60,6 +55,8 @@ Add to your MCP configuration:
 }
 ```
 
+The first run downloads dependencies and may take a minute. For JavaScript rendering support, install Playwright browsers: `uvx playwright install chromium --with-deps`
+
 Once configured, your AI gets two tools:
 
 - **`read_url`** — Fetch and read web pages, articles, documentation, online PDFs
@@ -68,7 +65,7 @@ Once configured, your AI gets two tools:
 Example prompts:
 
 > "Read the Python asyncio documentation and summarize it"
-> "What's in this PDF?" *(with file attached)*
+> "What's in this PDF?" _(with file attached)_
 > "Read this article: https://example.com/news"
 > "Extract text from this screenshot"
 
@@ -101,6 +98,7 @@ docker run -p 127.0.0.1:8080:8080 ghcr.io/peteretelej/md-server
 ```
 
 **Resource Requirements:**
+
 - Memory: 1GB recommended (minimum 512MB)
 - Storage: ~1.2GB image size
 - Initial startup: 10-15 seconds (browser initialization)
@@ -252,16 +250,16 @@ async def convert_documents():
     # Convert file
     result = await converter.convert_file('document.pdf')
     print(result.markdown)
-    
+
     # Convert URL
     result = await converter.convert_url('https://example.com')
     print(result.markdown)
-    
+
     # Convert content
     with open('file.docx', 'rb') as f:
         result = await converter.convert_content(f.read(), filename='file.docx')
     print(result.markdown)
-    
+
     # Convert text
     result = await converter.convert_text('<h1>HTML</h1>', mime_type='text/html')
     print(result.markdown)
@@ -285,11 +283,11 @@ async def use_remote_api():
         # Convert file
         result = await client.convert_file('document.pdf')
         print(result.markdown)
-        
+
         # Convert URL
         result = await client.convert_url('https://example.com')
         print(result.markdown)
-        
+
         # Convert text
         result = await client.convert_text('<h1>HTML</h1>', mime_type='text/html')
         print(result.markdown)
