@@ -17,7 +17,34 @@ from .core.converter import DocumentConverter
 from .core.validation import ValidationError
 from .core.config import Settings
 from .core.detection import ContentTypeDetector
+from .core.errors import (
+    ConversionError,
+    HTTPFetchError,
+    ErrorCode,
+)
 from .security import SSRFError
+
+
+def _error_code_to_http_status(code: ErrorCode, status_code: int | None) -> int:
+    """Map error code to appropriate HTTP status code."""
+    # If we have the original HTTP status, use it for 4xx errors
+    if status_code:
+        if status_code == 404:
+            return 404
+        if status_code in (401, 403):
+            return 403
+        if 500 <= status_code < 600:
+            return 502  # Bad Gateway for upstream server errors
+
+    # Fall back to error code mapping
+    if code == ErrorCode.NOT_FOUND:
+        return 404
+    if code == ErrorCode.ACCESS_DENIED:
+        return 403
+    if code == ErrorCode.TIMEOUT:
+        return 504
+    # Connection failures, server errors -> 502 Bad Gateway
+    return 502
 
 
 def _wants_markdown(accept_header: str, output_format: str = None) -> bool:
@@ -144,6 +171,28 @@ class ConvertController(Controller):
                 ],
             )
             raise HTTPException(status_code=400, detail=error_response.model_dump())
+        except HTTPFetchError as e:
+            # Map error code to HTTP status
+            http_status = _error_code_to_http_status(e.code, e.status_code)
+            details = {"status_code": e.status_code} if e.status_code else {}
+            if hasattr(e, "url"):
+                details["url"] = e.url
+            error_response = ErrorResponse.create_error(
+                code=e.code.value,
+                message=str(e),
+                details=details or None,
+                suggestions=e.suggestions,
+            )
+            raise HTTPException(
+                status_code=http_status, detail=error_response.model_dump()
+            )
+        except ConversionError as e:
+            error_response = ErrorResponse.create_error(
+                code=e.code.value,
+                message=str(e),
+                suggestions=e.suggestions,
+            )
+            raise HTTPException(status_code=500, detail=error_response.model_dump())
         except ValueError as e:
             error_response = ErrorResponse.create_error(
                 code="INVALID_INPUT",

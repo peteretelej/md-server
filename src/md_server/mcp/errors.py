@@ -1,24 +1,9 @@
 """MCP error taxonomy with factory functions for structured errors."""
 
-from enum import Enum
-
 from .models import MCPError, MCPErrorResponse, MCPErrorDetails
 
-
-class ErrorCode(str, Enum):
-    """Standard error codes for MCP responses."""
-
-    TIMEOUT = "TIMEOUT"
-    CONNECTION_FAILED = "CONNECTION_FAILED"
-    NOT_FOUND = "NOT_FOUND"
-    ACCESS_DENIED = "ACCESS_DENIED"
-    INVALID_URL = "INVALID_URL"
-    UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
-    FILE_TOO_LARGE = "FILE_TOO_LARGE"
-    CONVERSION_FAILED = "CONVERSION_FAILED"
-    CONTENT_EMPTY = "CONTENT_EMPTY"
-    INVALID_INPUT = "INVALID_INPUT"
-    UNKNOWN_TOOL = "UNKNOWN_TOOL"
+# Import ErrorCode from shared module for consistency across HTTP and MCP APIs
+from ..core.errors import ErrorCode
 
 
 SUPPORTED_FORMATS = [
@@ -195,5 +180,21 @@ def invalid_input_error(message: str) -> MCPErrorResponse:
             suggestions=[
                 "Check the input parameters are correct",
             ],
+        )
+    )
+
+
+def server_error(url: str, status_code: int = 500) -> MCPErrorResponse:
+    """Create a server error (5xx) response."""
+    return MCPErrorResponse(
+        error=MCPError(
+            code=ErrorCode.SERVER_ERROR,
+            message=f"Server error at {url}",
+            suggestions=[
+                "The remote server encountered an error",
+                "Try again later",
+                "The website may be experiencing issues",
+            ],
+            details=MCPErrorDetails(status_code=status_code),
         )
     )

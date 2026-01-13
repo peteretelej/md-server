@@ -5,6 +5,16 @@ from unittest.mock import AsyncMock, MagicMock
 from md_server.mcp.handlers import handle_read_url, handle_read_file
 from md_server.mcp.models import MCPSuccessResponse, MCPErrorResponse
 from md_server.mcp.errors import ErrorCode
+from md_server.core.errors import (
+    NotFoundError,
+    AccessDeniedError,
+    ServerError,
+    URLTimeoutError,
+    URLConnectionError,
+    HTTPFetchError,
+    ConversionError,
+    ErrorCode as CoreErrorCode,
+)
 
 
 @pytest.fixture
@@ -139,6 +149,46 @@ class TestHandleReadUrl:
 
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == ErrorCode.CONVERSION_FAILED
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exception,expected_code",
+        [
+            (NotFoundError("https://x.com"), ErrorCode.NOT_FOUND),
+            (AccessDeniedError("https://x.com", 403), ErrorCode.ACCESS_DENIED),
+            (ServerError("https://x.com", 500), ErrorCode.SERVER_ERROR),
+            (URLTimeoutError("https://x.com", 30), ErrorCode.TIMEOUT),
+            (
+                URLConnectionError("https://x.com", "refused"),
+                ErrorCode.CONNECTION_FAILED,
+            ),
+            (
+                HTTPFetchError("err", CoreErrorCode.CONNECTION_FAILED),
+                ErrorCode.CONVERSION_FAILED,
+            ),
+            (ConversionError("failed"), ErrorCode.CONVERSION_FAILED),
+        ],
+        ids=[
+            "NotFound",
+            "AccessDenied",
+            "ServerError",
+            "Timeout",
+            "Connection",
+            "HTTPFetch",
+            "Conversion",
+        ],
+    )
+    async def test_typed_exception_handling(
+        self, mock_converter, exception, expected_code
+    ):
+        """Should return correct error code for typed exceptions."""
+        mock_converter.convert_url = AsyncMock(side_effect=exception)
+        mock_converter.timeout = 30
+
+        result = await handle_read_url(mock_converter, "https://example.com")
+
+        assert isinstance(result, MCPErrorResponse)
+        assert result.error.code == expected_code
 
 
 @pytest.mark.unit

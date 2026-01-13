@@ -254,25 +254,19 @@ class TestDocumentConverter:
     @pytest.mark.asyncio
     async def test_timeout_handling_in_url_conversion(self, converter):
         # Test timeout handling in URL conversion
-        converter.timeout = 1  # Very short timeout
+        # Mock asyncio.wait_for to raise TimeoutError directly (no real sleep)
+        import asyncio
+
+        from md_server.core.errors import URLTimeoutError
 
         with (
             patch("md_server.core.converter.validate_url") as mock_validate,
-            patch(
-                "md_server.core.converter.DocumentConverter._sync_convert_url"
-            ) as mock_sync,
+            patch("md_server.core.converter.asyncio.wait_for") as mock_wait_for,
         ):
             mock_validate.return_value = "https://slow-website.com"
+            mock_wait_for.side_effect = asyncio.TimeoutError()
 
-            def slow_conversion(url):
-                import time
-
-                time.sleep(2)  # Longer than timeout
-                return "converted content"
-
-            mock_sync.side_effect = slow_conversion
-
-            with pytest.raises(TimeoutError, match="URL conversion timed out"):
+            with pytest.raises(URLTimeoutError, match="timed out"):
                 await converter.convert_url("https://slow-website.com")
 
     def test_sync_convert_content_calls_markitdown(self, converter):
@@ -319,10 +313,12 @@ class TestDocumentConverter:
         # Test URL conversion exception handling
         url = "https://example.com"
 
+        from md_server.core.errors import HTTPFetchError
+
         with patch.object(converter._markitdown, "convert") as mock_convert:
             mock_convert.side_effect = Exception("Network error")
 
-            with pytest.raises(Exception, match="Failed to convert URL"):
+            with pytest.raises(HTTPFetchError):
                 converter._sync_convert_url(url)
 
     # --- Additional Format Detection Tests ---

@@ -145,26 +145,28 @@ class TestAdvancedErrorPaths:
         response = client.post(
             "/convert", json={"url": test_server.url("nonexistent.html")}
         )
-        assert response.status_code in [400, 500]
+        # 404 for not found, 502 for connection/server errors, 500 for other errors
+        assert response.status_code in [400, 404, 500, 502]
         data = response.json()
         # Litestar may return different error formats
         if "success" in data:
             assert data["success"] is False
         elif "detail" in data:
-            assert "error" in data["detail"] or data["status_code"] == 500
+            assert "error" in data["detail"] or data["status_code"] in [404, 500, 502]
 
     def test_connection_error_simulation(self, client):
         # Note: localhost is allowed by default, so this tests actual connection errors
         response = client.post(
             "/convert", json={"url": "http://127.0.0.1:1/nonexistent"}
         )
-        assert response.status_code in [400, 500]
+        # 502 for connection errors (new behavior), 400/500 for other errors
+        assert response.status_code in [400, 500, 502]
         data = response.json()
         # Litestar may return different error formats
         if "success" in data:
             assert data["success"] is False
         elif "detail" in data:
-            assert "error" in data["detail"] or data["status_code"] == 500
+            assert "error" in data["detail"] or data["status_code"] in [500, 502]
 
     def test_file_size_too_large_error(self, client):
         large_content = "x" * (50 * 1024 * 1024 + 1)
@@ -270,7 +272,8 @@ class TestValidationErrorMapping:
 
         for url in error_endpoints:
             response = client.post("/convert", json={"url": url})
-            assert response.status_code in [200, 400, 500]
+            # HTTP error responses now return more specific status codes
+            assert response.status_code in [200, 400, 403, 404, 500, 502]
 
     def test_unsupported_format_error_mapping(self, client):
         response = client.post(
@@ -439,7 +442,8 @@ class TestFileNotFoundErrors:
 
         for url in broken_urls:
             response = client.post("/convert", json={"url": url})
-            assert response.status_code in [200, 400, 404, 500]
+            # 404 for not found, 502 for connection errors
+            assert response.status_code in [200, 400, 404, 500, 502]
 
 
 class TestInvalidContentTypeHandling:

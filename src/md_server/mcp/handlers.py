@@ -8,6 +8,9 @@ from .models import MCPSuccessResponse, MCPErrorResponse, MCPMetadata
 from .errors import (
     timeout_error,
     connection_error,
+    not_found_error,
+    access_denied_error,
+    server_error,
     invalid_url_error,
     content_empty_error,
     conversion_error,
@@ -15,6 +18,15 @@ from .errors import (
     file_too_large_error,
 )
 from ..core.converter import DocumentConverter
+from ..core.errors import (
+    NotFoundError,
+    AccessDeniedError,
+    ServerError,
+    URLTimeoutError,
+    URLConnectionError,
+    HTTPFetchError,
+    ConversionError,
+)
 
 # Image extensions that should trigger OCR
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".tiff", ".bmp"}
@@ -67,6 +79,20 @@ async def handle_read_url(
             ),
         )
 
+    except NotFoundError as e:
+        return not_found_error(e.url)
+    except AccessDeniedError as e:
+        return access_denied_error(e.url, e.status_code)
+    except ServerError as e:
+        return server_error(e.url, e.status_code)
+    except URLTimeoutError as e:
+        return timeout_error("URL fetch", e.timeout)
+    except URLConnectionError as e:
+        return connection_error(e.url, e.reason)
+    except HTTPFetchError as e:
+        return conversion_error(str(e))
+    except ConversionError as e:
+        return conversion_error(str(e))
     except TimeoutError:
         return timeout_error("URL fetch", converter.timeout)
     except ConnectionError as e:

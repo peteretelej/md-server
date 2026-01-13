@@ -7,6 +7,11 @@ from typing import Optional, Dict, Any, Union
 from markitdown import MarkItDown, StreamInfo
 
 from .config import get_logger, get_settings
+from .errors import (
+    classify_http_error,
+    ConversionError,
+    URLTimeoutError,
+)
 from ..metadata import MetadataExtractor
 from ..models import ConversionResult, ConversionMetadata
 from ..security import validate_url
@@ -269,7 +274,7 @@ class DocumentConverter:
                 timeout=self.timeout,
             )
         except asyncio.TimeoutError:
-            raise TimeoutError(f"URL conversion timed out after {self.timeout}s")
+            raise URLTimeoutError(url, self.timeout)
 
     async def _crawl_with_browser(self, url: str) -> str:
         try:
@@ -295,12 +300,17 @@ class DocumentConverter:
                 result = await crawler.arun(url, config=run_config)
 
                 if not result.success:
-                    raise Exception(f"Failed to crawl {url}: {result.error_message}")
+                    error_msg = result.error_message or "Unknown browser error"
+                    raise ConversionError(f"Failed to crawl {url}: {error_msg}")
 
                 return result.markdown or ""
+        except ConversionError:
+            raise
+        except asyncio.TimeoutError:
+            raise URLTimeoutError(url, self.timeout)
         except Exception as e:
             logger.error("Crawl4AI browser crawling failed for %s: %s", url, e)
-            raise Exception(f"Failed to convert URL with browser: {str(e)}")
+            raise classify_http_error(e, url)
 
     def _sync_convert_content(
         self,
@@ -334,7 +344,7 @@ class DocumentConverter:
             return result.markdown
         except Exception as e:
             logger.error("MarkItDown URL conversion failed for %s: %s", url, e)
-            raise Exception(f"Failed to convert URL: {str(e)}")
+            raise classify_http_error(e, url)
 
     def _create_stream_info_for_content(
         self, filename: Optional[str]
