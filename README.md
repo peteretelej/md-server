@@ -66,6 +66,8 @@ Once configured, your AI gets two tools:
 - **`read_url`** — Fetch and read web pages, articles, documentation, online PDFs
 - **`read_file`** — Read uploaded documents with auto-OCR for images
 
+Both tools support token-based truncation, markdown-aware sectioning, and output format control. See [MCP Integration Guide](docs/mcp-guide.md) for all options.
+
 Example prompts:
 
 > "Read the Python asyncio documentation and summarize it"
@@ -229,102 +231,25 @@ pdftotext document.pdf - | curl -X POST localhost:8080/convert \
 
 ### Python SDK
 
-Install the SDK:
-
 ```bash
 pip install md-server[sdk]
 ```
 
-#### Local Conversion
-
 ```python
 from md_server.sdk import MDConverter
-import asyncio
 
-# Create converter
-converter = MDConverter(
-    ocr_enabled=True,
-    js_rendering=True,
-    extract_images=True,
-    timeout=60
-)
+converter = MDConverter(ocr_enabled=True, js_rendering=True)
 
-# Async usage
-async def convert_documents():
-    # Convert file
-    result = await converter.convert_file('document.pdf')
-    print(result.markdown)
+# Async
+result = await converter.convert_file('document.pdf')
+result = await converter.convert_url('https://example.com')
+print(result.markdown)
 
-    # Convert URL
-    result = await converter.convert_url('https://example.com')
-    print(result.markdown)
-
-    # Convert content
-    with open('file.docx', 'rb') as f:
-        result = await converter.convert_content(f.read(), filename='file.docx')
-    print(result.markdown)
-
-    # Convert text
-    result = await converter.convert_text('<h1>HTML</h1>', mime_type='text/html')
-    print(result.markdown)
-
-asyncio.run(convert_documents())
-
-# Sync usage
+# Sync
 result = converter.convert_file_sync('document.pdf')
-print(result.markdown)
 ```
 
-#### Remote API Client
-
-```python
-from md_server.sdk import RemoteMDConverter
-import asyncio
-
-# Create remote client
-async def use_remote_api():
-    async with RemoteMDConverter('http://localhost:8080') as client:
-        # Convert file
-        result = await client.convert_file('document.pdf')
-        print(result.markdown)
-
-        # Convert URL
-        result = await client.convert_url('https://example.com')
-        print(result.markdown)
-
-        # Convert text
-        result = await client.convert_text('<h1>HTML</h1>', mime_type='text/html')
-        print(result.markdown)
-
-asyncio.run(use_remote_api())
-
-# Or sync
-client = RemoteMDConverter('http://localhost:8080')
-result = client.convert_file_sync('document.pdf')
-print(result.markdown)
-```
-
-#### Raw HTTP Client
-
-```python
-import requests
-
-# Convert file
-with open('document.pdf', 'rb') as f:
-    response = requests.post(
-        'http://localhost:8080/convert',
-        data=f.read(),
-        headers={'Content-Type': 'application/pdf'}
-    )
-    markdown = response.json()['markdown']
-
-# Convert URL
-response = requests.post(
-    'http://localhost:8080/convert',
-    json={'url': 'https://example.com'}
-)
-markdown = response.json()['markdown']
-```
+For remote API usage and advanced patterns, see the [Python SDK documentation](docs/sdk/README.md).
 
 ## Error Handling
 
