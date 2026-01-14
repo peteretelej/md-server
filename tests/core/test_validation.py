@@ -138,6 +138,34 @@ class TestContentValidator:
         with pytest.raises(ValidationError, match="Content type mismatch"):
             ContentValidator.validate_content_type(text_bytes, "application/pdf")
 
+    def test_validate_content_type_no_declared_type(self):
+        """Should return detected type when no declared type provided."""
+        pdf_bytes = b"%PDF-1.4"
+        result = ContentValidator.validate_content_type(pdf_bytes, None)
+        assert result == "application/pdf"
+
+    def test_validate_content_type_octet_stream_fallback(self):
+        """Should use declared type when content is detected as octet-stream."""
+        binary_bytes = b"\x00\x01\x02\x03\xff"  # Detected as octet-stream
+        result = ContentValidator.validate_content_type(
+            binary_bytes, "application/custom"
+        )
+        assert result == "application/custom"
+
+    @pytest.mark.parametrize(
+        "content,declared_type",
+        [
+            (b"Some plain text content", "text/csv"),
+            (b"# Heading\n\nParagraph", "text/markdown"),
+            (b"key=value", "text/plain"),
+        ],
+        ids=["csv", "markdown", "plain"],
+    )
+    def test_validate_content_type_text_permissive(self, content, declared_type):
+        """Should allow declared text/* when content is detected as text/plain."""
+        result = ContentValidator.validate_content_type(content, declared_type)
+        assert result == declared_type
+
 
 class TestMimeTypeValidator:
     def test_validate_mime_type_valid(self):

@@ -107,6 +107,9 @@ curl -X POST http://localhost:8080/convert \
     "preserve_formatting": true,
     "ocr_enabled": false,
     "max_length": null,
+    "max_tokens": null,
+    "truncate_mode": null,
+    "truncate_limit": null,
     "clean_markdown": false,
     "include_frontmatter": false,
     "output_format": null
@@ -150,6 +153,10 @@ curl -X POST http://localhost:8080/convert \
 | `title` | string | Extracted document title (if available) |
 | `estimated_tokens` | int | Estimated token count for LLM usage |
 | `detected_language` | string | ISO 639-1 language code (e.g., "en", "es") |
+| `was_truncated` | bool | True if content was truncated |
+| `original_length` | int | Original character count before truncation |
+| `original_tokens` | int | Original token count before truncation |
+| `truncation_mode` | string | How content was truncated (chars, tokens, sections, paragraphs) |
 
 ##### Error (4xx/5xx)
 
@@ -290,10 +297,27 @@ curl -s -X POST localhost:8080/convert \
 | `extract_images` | bool | false | Extract embedded images |
 | `preserve_formatting` | bool | true | Keep complex formatting |
 | `ocr_enabled` | bool | false | OCR for images/scanned PDFs |
-| `max_length` | int | null | Truncate output |
+| `max_length` | int | null | Truncate output to character limit |
+| `max_tokens` | int | null | Truncate output to token limit (uses tiktoken cl100k_base) |
+| `truncate_mode` | string | null | Truncation mode: `chars`, `tokens`, `sections`, `paragraphs` |
+| `truncate_limit` | int | null | Limit for truncation mode |
 | `clean_markdown` | bool | false | Normalize markdown |
 | `include_frontmatter` | bool | false | Prepend YAML frontmatter with metadata |
 | `output_format` | string | null | Response format: "json" or "markdown" |
+
+### Truncation Options
+
+For controlling output size, md-server offers flexible truncation:
+
+**Character/Token limits:**
+- `max_length` - Simple character truncation
+- `max_tokens` - Token-based truncation using tiktoken cl100k_base (useful for LLM context limits)
+
+**Markdown-aware truncation:**
+- `truncate_mode: "sections"` with `truncate_limit: 5` - Returns first 5 `##` sections
+- `truncate_mode: "paragraphs"` with `truncate_limit: 10` - Returns first 10 paragraphs
+
+When content is truncated, the response metadata includes `was_truncated`, `original_length`, `original_tokens`, and `truncation_mode`.
 
 ### include_frontmatter
 
@@ -403,6 +427,16 @@ curl -X POST localhost:8080/convert \
 curl -X POST localhost:8080/convert \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","options":{"include_frontmatter":true}}'
+
+# With token limit (useful for LLM context)
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com","options":{"max_tokens":4000}}'
+
+# Get first 5 sections only
+curl -X POST localhost:8080/convert \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com","options":{"truncate_mode":"sections","truncate_limit":5}}'
 
 # Pipe from stdin
 echo "<h1>Hello</h1>" | curl -X POST localhost:8080/convert \

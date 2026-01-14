@@ -44,9 +44,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         arguments: Tool arguments
 
     Returns:
-        List of TextContent with JSON response
+        List of TextContent with response (raw markdown or JSON)
     """
     converter = get_converter()
+    output_format = arguments.get("output_format", "markdown")
 
     if name == "read_url":
         url = arguments.get("url")
@@ -57,6 +58,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 converter=converter,
                 url=url,
                 render_js=arguments.get("render_js", False),
+                max_length=arguments.get("max_length"),
+                max_tokens=arguments.get("max_tokens"),
+                truncate_mode=arguments.get("truncate_mode"),
+                truncate_limit=arguments.get("truncate_limit"),
+                timeout=arguments.get("timeout"),
+                include_frontmatter=arguments.get("include_frontmatter", True),
+                output_format=output_format,
             )
 
     elif name == "read_file":
@@ -79,10 +87,20 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     converter=converter,
                     content=content,
                     filename=filename,
+                    max_length=arguments.get("max_length"),
+                    max_tokens=arguments.get("max_tokens"),
+                    truncate_mode=arguments.get("truncate_mode"),
+                    truncate_limit=arguments.get("truncate_limit"),
+                    timeout=arguments.get("timeout"),
+                    include_frontmatter=arguments.get("include_frontmatter", True),
+                    output_format=output_format,
                 )
     else:
         result = unknown_tool_error(name)
 
+    # Return raw markdown string or JSON-serialized response
+    if isinstance(result, str):
+        return [TextContent(type="text", text=result)]
     return [TextContent(type="text", text=result.model_dump_json())]
 
 

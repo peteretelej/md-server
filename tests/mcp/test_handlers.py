@@ -2,7 +2,11 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from md_server.mcp.handlers import handle_read_url, handle_read_file
+from md_server.mcp.handlers import (
+    handle_read_url,
+    handle_read_file,
+    _extract_title_from_url,
+)
 from md_server.mcp.models import MCPSuccessResponse, MCPErrorResponse
 from md_server.mcp.errors import ErrorCode
 from md_server.core.errors import (
@@ -34,6 +38,11 @@ def mock_conversion_result():
     result.metadata = MagicMock()
     result.metadata.title = "Test Title"
     result.metadata.detected_language = "en"
+    result.metadata.detected_format = "text/html"
+    result.metadata.was_truncated = False
+    result.metadata.original_length = None
+    result.metadata.original_tokens = None
+    result.metadata.truncation_mode = None
     return result
 
 
@@ -41,62 +50,115 @@ def mock_conversion_result():
 class TestHandleReadUrl:
     """Tests for handle_read_url handler."""
 
+    # --- Output Format Tests (table-driven) ---
+
     @pytest.mark.asyncio
-    async def test_success(self, mock_converter, mock_conversion_result):
-        """Should return success response for valid URL."""
+    @pytest.mark.parametrize(
+        "output_format,expected_type,check_field",
+        [
+            (None, str, None),  # default is markdown
+            ("markdown", str, None),
+            ("json", MCPSuccessResponse, "success"),
+        ],
+        ids=["default_markdown", "explicit_markdown", "json"],
+    )
+    async def test_output_format_returns_correct_type(
+        self,
+        mock_converter,
+        mock_conversion_result,
+        output_format,
+        expected_type,
+        check_field,
+    ):
+        """Should return correct type based on output_format."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_url(
-            mock_converter, "https://example.com", render_js=False
-        )
+        kwargs = {"render_js": False}
+        if output_format is not None:
+            kwargs["output_format"] = output_format
 
-        assert isinstance(result, MCPSuccessResponse)
-        assert result.success is True
-        assert result.title == "Test Title"
+        result = await handle_read_url(mock_converter, "https://example.com", **kwargs)
+
+        assert isinstance(result, expected_type)
+        if check_field:
+            assert getattr(result, check_field) is True
 
     @pytest.mark.asyncio
-    async def test_invalid_url_no_scheme(self, mock_converter):
-        """Should return error for URL without scheme."""
-        result = await handle_read_url(mock_converter, "example.com", render_js=False)
+    async def test_error_always_json(self, mock_converter):
+        """Error responses should always be JSON regardless of output_format."""
+        result = await handle_read_url(
+            mock_converter,
+            "invalid-url",
+            render_js=False,
+            output_format="markdown",
+        )
 
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == ErrorCode.INVALID_URL
 
+    # --- Invalid URL Tests (table-driven) ---
+
     @pytest.mark.asyncio
-    async def test_invalid_url_ftp_scheme(self, mock_converter):
-        """Should return error for non-http schemes."""
-        result = await handle_read_url(
-            mock_converter, "ftp://example.com", render_js=False
-        )
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "example.com",  # no scheme
+            "ftp://example.com",  # non-http scheme
+        ],
+        ids=["no_scheme", "ftp_scheme"],
+    )
+    async def test_invalid_url_rejected(self, mock_converter, url):
+        """Should return error for invalid URLs."""
+        result = await handle_read_url(mock_converter, url, render_js=False)
 
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == ErrorCode.INVALID_URL
 
-    @pytest.mark.asyncio
-    async def test_timeout_error(self, mock_converter):
-        """Should return timeout error when conversion times out."""
-        mock_converter.convert_url = AsyncMock(side_effect=TimeoutError())
-
-        result = await handle_read_url(
-            mock_converter, "https://slow.com", render_js=False
-        )
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.TIMEOUT
+    # --- Error Handling Tests (table-driven) ---
 
     @pytest.mark.asyncio
-    async def test_connection_error(self, mock_converter):
-        """Should return connection error when URL unreachable."""
-        mock_converter.convert_url = AsyncMock(
-            side_effect=ConnectionError("Connection refused")
-        )
+    @pytest.mark.parametrize(
+        "exception,expected_code",
+        [
+            (TimeoutError(), ErrorCode.TIMEOUT),
+            (ConnectionError("Connection refused"), ErrorCode.CONNECTION_FAILED),
+            (NotFoundError("https://x.com"), ErrorCode.NOT_FOUND),
+            (AccessDeniedError("https://x.com", 403), ErrorCode.ACCESS_DENIED),
+            (ServerError("https://x.com", 500), ErrorCode.SERVER_ERROR),
+            (URLTimeoutError("https://x.com", 30), ErrorCode.TIMEOUT),
+            (
+                URLConnectionError("https://x.com", "refused"),
+                ErrorCode.CONNECTION_FAILED,
+            ),
+            (
+                HTTPFetchError("err", CoreErrorCode.CONNECTION_FAILED),
+                ErrorCode.CONVERSION_FAILED,
+            ),
+            (ConversionError("failed"), ErrorCode.CONVERSION_FAILED),
+            (Exception("Something went wrong"), ErrorCode.CONVERSION_FAILED),
+        ],
+        ids=[
+            "TimeoutError",
+            "ConnectionError",
+            "NotFound",
+            "AccessDenied",
+            "ServerError",
+            "URLTimeout",
+            "URLConnection",
+            "HTTPFetch",
+            "Conversion",
+            "GenericException",
+        ],
+    )
+    async def test_exception_handling(self, mock_converter, exception, expected_code):
+        """Should return correct error code for various exceptions."""
+        mock_converter.convert_url = AsyncMock(side_effect=exception)
+        mock_converter.timeout = 30
 
-        result = await handle_read_url(
-            mock_converter, "https://unreachable.com", render_js=False
-        )
+        result = await handle_read_url(mock_converter, "https://example.com")
 
         assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.CONNECTION_FAILED
+        assert result.error.code == expected_code
 
     @pytest.mark.asyncio
     async def test_empty_content(self, mock_converter):
@@ -115,6 +177,56 @@ class TestHandleReadUrl:
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == ErrorCode.CONTENT_EMPTY
 
+    # --- Parameter Passing Tests (table-driven) ---
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "param_name,param_value,converter_key",
+        [
+            ("max_length", 100, "max_length"),
+            ("max_tokens", 500, "max_tokens"),
+            ("timeout", 60, "timeout"),
+            ("truncate_mode", "sections", "truncate_mode"),
+            ("truncate_limit", 5, "truncate_limit"),
+        ],
+        ids=["max_length", "max_tokens", "timeout", "truncate_mode", "truncate_limit"],
+    )
+    async def test_optional_param_passed_when_set(
+        self,
+        mock_converter,
+        mock_conversion_result,
+        param_name,
+        param_value,
+        converter_key,
+    ):
+        """Should pass optional parameters to converter when set."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        kwargs = {param_name: param_value}
+        await handle_read_url(mock_converter, "https://example.com", **kwargs)
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert call_kwargs[converter_key] == param_value
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "param_name",
+        ["max_length", "max_tokens", "timeout", "truncate_mode", "truncate_limit"],
+        ids=["max_length", "max_tokens", "timeout", "truncate_mode", "truncate_limit"],
+    )
+    async def test_optional_param_not_passed_when_none(
+        self, mock_converter, mock_conversion_result, param_name
+    ):
+        """Should not pass optional parameters when None."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(mock_converter, "https://example.com")
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert param_name not in call_kwargs
+
     @pytest.mark.asyncio
     async def test_render_js_passed_to_converter(
         self, mock_converter, mock_conversion_result
@@ -129,133 +241,242 @@ class TestHandleReadUrl:
         assert call_kwargs["js_rendering"] is True
 
     @pytest.mark.asyncio
-    async def test_word_count_calculated(self, mock_converter, mock_conversion_result):
-        """Should calculate word count from content."""
+    @pytest.mark.parametrize(
+        "include_frontmatter,expected",
+        [(True, True), (False, False)],
+        ids=["with_frontmatter", "without_frontmatter"],
+    )
+    async def test_include_frontmatter_passed_to_converter(
+        self, mock_converter, mock_conversion_result, include_frontmatter, expected
+    ):
+        """Should pass include_frontmatter to converter."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_url(mock_converter, "https://example.com")
+        await handle_read_url(
+            mock_converter,
+            "https://example.com",
+            include_frontmatter=include_frontmatter,
+        )
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert call_kwargs["include_frontmatter"] is expected
+
+    @pytest.mark.asyncio
+    async def test_include_frontmatter_default_true(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should default include_frontmatter to True."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_url(mock_converter, "https://example.com")
+
+        mock_converter.convert_url.assert_called_once()
+        call_kwargs = mock_converter.convert_url.call_args.kwargs
+        assert call_kwargs["include_frontmatter"] is True
+
+    @pytest.mark.asyncio
+    async def test_word_count_calculated(self, mock_converter, mock_conversion_result):
+        """Should calculate word count from content (JSON format)."""
+        mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
+
+        result = await handle_read_url(
+            mock_converter, "https://example.com", output_format="json"
+        )
 
         assert isinstance(result, MCPSuccessResponse)
         assert result.word_count > 0
-
-    @pytest.mark.asyncio
-    async def test_generic_exception(self, mock_converter):
-        """Should return conversion error for generic exceptions."""
-        mock_converter.convert_url = AsyncMock(
-            side_effect=Exception("Something went wrong")
-        )
-
-        result = await handle_read_url(mock_converter, "https://example.com")
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.CONVERSION_FAILED
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "exception,expected_code",
-        [
-            (NotFoundError("https://x.com"), ErrorCode.NOT_FOUND),
-            (AccessDeniedError("https://x.com", 403), ErrorCode.ACCESS_DENIED),
-            (ServerError("https://x.com", 500), ErrorCode.SERVER_ERROR),
-            (URLTimeoutError("https://x.com", 30), ErrorCode.TIMEOUT),
-            (
-                URLConnectionError("https://x.com", "refused"),
-                ErrorCode.CONNECTION_FAILED,
-            ),
-            (
-                HTTPFetchError("err", CoreErrorCode.CONNECTION_FAILED),
-                ErrorCode.CONVERSION_FAILED,
-            ),
-            (ConversionError("failed"), ErrorCode.CONVERSION_FAILED),
-        ],
-        ids=[
-            "NotFound",
-            "AccessDenied",
-            "ServerError",
-            "Timeout",
-            "Connection",
-            "HTTPFetch",
-            "Conversion",
-        ],
-    )
-    async def test_typed_exception_handling(
-        self, mock_converter, exception, expected_code
-    ):
-        """Should return correct error code for typed exceptions."""
-        mock_converter.convert_url = AsyncMock(side_effect=exception)
-        mock_converter.timeout = 30
-
-        result = await handle_read_url(mock_converter, "https://example.com")
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == expected_code
 
 
 @pytest.mark.unit
 class TestHandleReadFile:
     """Tests for handle_read_file handler."""
 
+    # --- Output Format Tests (table-driven) ---
+
     @pytest.mark.asyncio
-    async def test_success_pdf(self, mock_converter, mock_conversion_result):
-        """Should return success for PDF conversion."""
+    @pytest.mark.parametrize(
+        "output_format,expected_type",
+        [
+            (None, str),  # default is markdown
+            ("markdown", str),
+            ("json", MCPSuccessResponse),
+        ],
+        ids=["default_markdown", "explicit_markdown", "json"],
+    )
+    async def test_output_format_returns_correct_type(
+        self, mock_converter, mock_conversion_result, output_format, expected_type
+    ):
+        """Should return correct type based on output_format."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        kwargs = {}
+        if output_format is not None:
+            kwargs["output_format"] = output_format
 
         result = await handle_read_file(
-            mock_converter, b"fake pdf content", "report.pdf"
+            mock_converter, b"fake content", "file.pdf", **kwargs
         )
 
-        assert isinstance(result, MCPSuccessResponse)
-        assert result.success is True
+        assert isinstance(result, expected_type)
 
     @pytest.mark.asyncio
-    async def test_auto_ocr_for_png(self, mock_converter, mock_conversion_result):
-        """Should enable OCR for PNG images."""
+    async def test_error_always_json(self, mock_converter):
+        """Error responses should always be JSON regardless of output_format."""
+        mock_converter.max_file_size_mb = 1
+        large_content = b"x" * (2 * 1024 * 1024)  # 2MB
+
+        result = await handle_read_file(
+            mock_converter,
+            large_content,
+            "large.pdf",
+            output_format="markdown",
+        )
+
+        assert isinstance(result, MCPErrorResponse)
+        assert result.error.code == ErrorCode.FILE_TOO_LARGE
+
+    # --- OCR Auto-Enable Tests (table-driven) ---
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "filename,should_ocr",
+        [
+            ("screenshot.png", True),
+            ("photo.jpg", True),
+            ("photo.jpeg", True),
+            ("doc.pdf", False),
+        ],
+        ids=["png", "jpg", "jpeg", "pdf"],
+    )
+    async def test_auto_ocr_by_extension(
+        self, mock_converter, mock_conversion_result, filename, should_ocr
+    ):
+        """Should enable OCR for image files, not for others."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(mock_converter, b"fake image", "screenshot.png")
+        await handle_read_file(mock_converter, b"fake content", filename)
 
         call_kwargs = mock_converter.convert_content.call_args.kwargs
-        assert call_kwargs["ocr_enabled"] is True
+        if should_ocr:
+            assert call_kwargs["ocr_enabled"] is True
+        else:
+            assert call_kwargs.get("ocr_enabled") is not True
+
+    # --- Parameter Passing Tests (table-driven) ---
 
     @pytest.mark.asyncio
-    async def test_auto_ocr_for_jpg(self, mock_converter, mock_conversion_result):
-        """Should enable OCR for JPG images."""
+    @pytest.mark.parametrize(
+        "param_name,param_value,converter_key",
+        [
+            ("max_length", 100, "max_length"),
+            ("max_tokens", 500, "max_tokens"),
+            ("timeout", 60, "timeout"),
+            ("truncate_mode", "paragraphs", "truncate_mode"),
+            ("truncate_limit", 3, "truncate_limit"),
+        ],
+        ids=["max_length", "max_tokens", "timeout", "truncate_mode", "truncate_limit"],
+    )
+    async def test_optional_param_passed_when_set(
+        self,
+        mock_converter,
+        mock_conversion_result,
+        param_name,
+        param_value,
+        converter_key,
+    ):
+        """Should pass optional parameters to converter when set."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(mock_converter, b"fake image", "photo.jpg")
+        kwargs = {param_name: param_value}
+        await handle_read_file(mock_converter, b"fake content", "doc.pdf", **kwargs)
 
+        mock_converter.convert_content.assert_called_once()
         call_kwargs = mock_converter.convert_content.call_args.kwargs
-        assert call_kwargs["ocr_enabled"] is True
+        assert call_kwargs[converter_key] == param_value
 
     @pytest.mark.asyncio
-    async def test_auto_ocr_for_jpeg(self, mock_converter, mock_conversion_result):
-        """Should enable OCR for JPEG images."""
+    @pytest.mark.parametrize(
+        "param_name",
+        ["max_length", "max_tokens", "timeout", "truncate_mode", "truncate_limit"],
+        ids=["max_length", "max_tokens", "timeout", "truncate_mode", "truncate_limit"],
+    )
+    async def test_optional_param_not_passed_when_none(
+        self, mock_converter, mock_conversion_result, param_name
+    ):
+        """Should not pass optional parameters when None."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(mock_converter, b"fake image", "photo.jpeg")
+        await handle_read_file(mock_converter, b"fake content", "doc.pdf")
 
+        mock_converter.convert_content.assert_called_once()
         call_kwargs = mock_converter.convert_content.call_args.kwargs
-        assert call_kwargs["ocr_enabled"] is True
+        assert param_name not in call_kwargs
 
     @pytest.mark.asyncio
-    async def test_no_ocr_for_pdf(self, mock_converter, mock_conversion_result):
-        """Should not enable OCR for PDF files."""
+    @pytest.mark.parametrize(
+        "include_frontmatter,expected",
+        [(True, True), (False, False)],
+        ids=["with_frontmatter", "without_frontmatter"],
+    )
+    async def test_include_frontmatter_passed_to_converter(
+        self, mock_converter, mock_conversion_result, include_frontmatter, expected
+    ):
+        """Should pass include_frontmatter to converter."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(mock_converter, b"pdf content", "doc.pdf")
+        await handle_read_file(
+            mock_converter,
+            b"fake content",
+            "doc.pdf",
+            include_frontmatter=include_frontmatter,
+        )
 
+        mock_converter.convert_content.assert_called_once()
         call_kwargs = mock_converter.convert_content.call_args.kwargs
-        assert call_kwargs.get("ocr_enabled") is not True
+        assert call_kwargs["include_frontmatter"] is expected
 
     @pytest.mark.asyncio
-    async def test_timeout_error(self, mock_converter):
-        """Should return timeout error when conversion times out."""
-        mock_converter.convert_content = AsyncMock(side_effect=TimeoutError())
+    async def test_include_frontmatter_default_true(
+        self, mock_converter, mock_conversion_result
+    ):
+        """Should default include_frontmatter to True."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        await handle_read_file(mock_converter, b"fake content", "doc.pdf")
+
+        mock_converter.convert_content.assert_called_once()
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert call_kwargs["include_frontmatter"] is True
+
+    # --- Error Handling Tests (table-driven) ---
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exception,expected_code",
+        [
+            (TimeoutError(), ErrorCode.TIMEOUT),
+            (ValueError("Unsupported format"), ErrorCode.UNSUPPORTED_FORMAT),
+            (ValueError("File too large to process"), ErrorCode.FILE_TOO_LARGE),
+            (ValueError("Some random error occurred"), ErrorCode.CONVERSION_FAILED),
+            (Exception("Something went wrong"), ErrorCode.CONVERSION_FAILED),
+        ],
+        ids=[
+            "timeout",
+            "unsupported",
+            "too_large",
+            "generic_valueerror",
+            "generic_exception",
+        ],
+    )
+    async def test_exception_handling(self, mock_converter, exception, expected_code):
+        """Should return correct error code for various exceptions."""
+        mock_converter.convert_content = AsyncMock(side_effect=exception)
 
         result = await handle_read_file(mock_converter, b"data", "file.pdf")
 
         assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.TIMEOUT
+        assert result.error.code == expected_code
 
     @pytest.mark.asyncio
     async def test_file_too_large(self, mock_converter):
@@ -268,63 +489,33 @@ class TestHandleReadFile:
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == ErrorCode.FILE_TOO_LARGE
 
-    @pytest.mark.asyncio
-    async def test_unsupported_format(self, mock_converter):
-        """Should return error for unsupported formats."""
-        mock_converter.convert_content = AsyncMock(
-            side_effect=ValueError("Unsupported format")
-        )
-
-        result = await handle_read_file(mock_converter, b"data", "file.xyz")
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.UNSUPPORTED_FORMAT
+    # --- Metadata Tests ---
 
     @pytest.mark.asyncio
     async def test_ocr_applied_in_metadata(
         self, mock_converter, mock_conversion_result
     ):
-        """Should set ocr_applied in metadata for images."""
+        """Should set ocr_applied in metadata for images (JSON format)."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_file(mock_converter, b"image", "photo.png")
+        result = await handle_read_file(
+            mock_converter, b"image", "photo.png", output_format="json"
+        )
 
         assert isinstance(result, MCPSuccessResponse)
         assert result.metadata.ocr_applied is True
 
     @pytest.mark.asyncio
     async def test_source_is_filename(self, mock_converter, mock_conversion_result):
-        """Should use filename as source."""
+        """Should use filename as source (JSON format)."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_file(mock_converter, b"data", "myfile.pdf")
+        result = await handle_read_file(
+            mock_converter, b"data", "myfile.pdf", output_format="json"
+        )
 
         assert isinstance(result, MCPSuccessResponse)
         assert result.source == "myfile.pdf"
-
-    @pytest.mark.asyncio
-    async def test_generic_exception(self, mock_converter):
-        """Should return conversion error for generic exceptions."""
-        mock_converter.convert_content = AsyncMock(
-            side_effect=Exception("Something went wrong")
-        )
-
-        result = await handle_read_file(mock_converter, b"data", "file.pdf")
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.CONVERSION_FAILED
-
-    @pytest.mark.asyncio
-    async def test_value_error_too_large(self, mock_converter):
-        """Should return file too large error for 'too large' ValueError."""
-        mock_converter.convert_content = AsyncMock(
-            side_effect=ValueError("File too large to process")
-        )
-
-        result = await handle_read_file(mock_converter, b"data", "file.pdf")
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.FILE_TOO_LARGE
 
 
 @pytest.mark.unit
@@ -339,137 +530,58 @@ class TestHandleReadUrlSsrf:
         return converter
 
     @pytest.mark.asyncio
-    async def test_ssrf_blocked_url(self, mock_converter):
-        """Should return connection error for SSRF blocked URLs."""
-        mock_converter.convert_url = AsyncMock(
-            side_effect=ValueError("URL blocked by SSRF protection")
-        )
-
-        result = await handle_read_url(
-            mock_converter, "https://169.254.169.254/metadata", render_js=False
-        )
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.CONNECTION_FAILED
-
-    @pytest.mark.asyncio
-    async def test_ssrf_blocked_lowercase(self, mock_converter):
-        """Should handle 'blocked' keyword in error message."""
-        mock_converter.convert_url = AsyncMock(
-            side_effect=ValueError("This URL is blocked")
-        )
-
-        result = await handle_read_url(
-            mock_converter, "https://internal.local", render_js=False
-        )
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.CONNECTION_FAILED
-
-    @pytest.mark.asyncio
-    async def test_value_error_non_ssrf(self, mock_converter):
-        """Should return conversion error for non-SSRF ValueError."""
-        mock_converter.convert_url = AsyncMock(
-            side_effect=ValueError("Some other validation error")
-        )
+    @pytest.mark.parametrize(
+        "error_message,expected_code",
+        [
+            ("URL blocked by SSRF protection", ErrorCode.CONNECTION_FAILED),
+            ("This URL is blocked", ErrorCode.CONNECTION_FAILED),
+            ("Some other validation error", ErrorCode.CONVERSION_FAILED),
+        ],
+        ids=["ssrf_blocked", "blocked_keyword", "non_ssrf"],
+    )
+    async def test_ssrf_value_error_handling(
+        self, mock_converter, error_message, expected_code
+    ):
+        """Should return correct error code for SSRF-related ValueErrors."""
+        mock_converter.convert_url = AsyncMock(side_effect=ValueError(error_message))
 
         result = await handle_read_url(
             mock_converter, "https://example.com", render_js=False
         )
 
         assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.CONVERSION_FAILED
+        assert result.error.code == expected_code
 
 
 @pytest.mark.unit
 class TestExtractTitleFromUrl:
     """Tests for _extract_title_from_url helper."""
 
-    def test_title_from_path_segment(self):
-        """Should extract title from URL path."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com/my-article")
-        assert result == "My Article"
-
-    def test_title_from_path_with_html_extension(self):
-        """Should strip .html extension."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com/page.html")
-        assert result == "Page"
-
-    def test_title_from_path_with_php_extension(self):
-        """Should strip .php extension."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com/contact.php")
-        assert result == "Contact"
-
-    def test_title_underscores_to_spaces(self):
-        """Should convert underscores to spaces."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com/my_cool_page")
-        assert result == "My Cool Page"
-
-    def test_fallback_to_domain(self):
-        """Should fall back to domain when path is empty."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com/")
-        assert result == "example.com"
-
-    def test_fallback_to_domain_no_trailing_slash(self):
-        """Should fall back to domain when path is root."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com")
-        assert result == "example.com"
-
-    def test_nested_path(self):
-        """Should extract last segment from nested path."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com/docs/api/getting-started")
-        assert result == "Getting Started"
-
-    def test_path_ending_with_slash_then_segment(self):
-        """Should handle paths with multiple slashes."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        result = _extract_title_from_url("https://example.com/blog/")
-        assert result == "Blog"
-
-    def test_path_with_trailing_slashes(self):
-        """Should handle paths with trailing slashes."""
-        from md_server.mcp.handlers import _extract_title_from_url
-
-        # Trailing slashes are stripped, so /foo// becomes /foo
-        result = _extract_title_from_url("https://example.com/foo//")
-        assert result == "Foo"
-
-
-@pytest.mark.unit
-class TestHandleReadFileValueError:
-    """Additional tests for ValueError handling in handle_read_file."""
-
-    @pytest.fixture
-    def mock_converter(self):
-        """Create a mock DocumentConverter."""
-        converter = MagicMock()
-        converter.timeout = 60
-        converter.max_file_size_mb = 50
-        return converter
-
-    @pytest.mark.asyncio
-    async def test_value_error_generic(self, mock_converter):
-        """Should return conversion error for generic ValueError."""
-        mock_converter.convert_content = AsyncMock(
-            side_effect=ValueError("Some random error occurred")
-        )
-
-        result = await handle_read_file(mock_converter, b"data", "file.pdf")
-
-        assert isinstance(result, MCPErrorResponse)
-        assert result.error.code == ErrorCode.CONVERSION_FAILED
+    @pytest.mark.parametrize(
+        "url,expected",
+        [
+            ("https://example.com/my-article", "My Article"),
+            ("https://example.com/page.html", "Page"),
+            ("https://example.com/contact.php", "Contact"),
+            ("https://example.com/my_cool_page", "My Cool Page"),
+            ("https://example.com/", "example.com"),
+            ("https://example.com", "example.com"),
+            ("https://example.com/docs/api/getting-started", "Getting Started"),
+            ("https://example.com/blog/", "Blog"),
+            ("https://example.com/foo//", "Foo"),
+        ],
+        ids=[
+            "path_with_hyphens",
+            "html_extension",
+            "php_extension",
+            "underscores",
+            "root_with_slash",
+            "root_no_slash",
+            "nested_path",
+            "trailing_slash",
+            "double_trailing_slash",
+        ],
+    )
+    def test_extract_title_from_url(self, url, expected):
+        """Should extract title correctly from various URL patterns."""
+        assert _extract_title_from_url(url) == expected

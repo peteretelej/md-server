@@ -131,6 +131,19 @@ Fetch and read content from a URL, returning clean markdown.
 |-----------|------|----------|---------|-------------|
 | `url` | string | Yes | - | URL to fetch (webpage, PDF link, document URL) |
 | `render_js` | boolean | No | false | Execute JavaScript before reading. Enable for SPAs and pages that load content dynamically. |
+| `max_length` | integer | No | - | Maximum characters to return. Content is truncated if exceeded. |
+| `max_tokens` | integer | No | - | Maximum tokens to return (uses tiktoken cl100k_base encoding). |
+| `truncate_mode` | string | No | - | Truncation mode: `chars`, `tokens`, `sections`, or `paragraphs`. |
+| `truncate_limit` | integer | No | - | Limit for truncation mode (count of chars/tokens/sections/paragraphs). |
+| `timeout` | integer | No | - | Timeout in seconds for the conversion operation. |
+| `include_frontmatter` | boolean | No | true | Include YAML frontmatter with metadata in the output. |
+| `output_format` | string | No | markdown | Output format: `markdown` (raw text) or `json` (structured response). |
+
+**Truncation Modes:**
+- `chars` - Truncate to a character limit
+- `tokens` - Truncate to a token limit (useful for LLM context limits)
+- `sections` - Keep only the first N `##` headings
+- `paragraphs` - Keep only the first N paragraphs
 
 #### Schema
 
@@ -150,6 +163,25 @@ Fetch and read content from a URL, returning clean markdown.
         "type": "boolean",
         "default": false,
         "description": "Execute JavaScript before reading. Enable for SPAs and pages that load content dynamically."
+      },
+      "max_tokens": {
+        "type": "integer",
+        "description": "Maximum tokens to return (uses tiktoken cl100k_base encoding)."
+      },
+      "truncate_mode": {
+        "type": "string",
+        "enum": ["chars", "tokens", "sections", "paragraphs"],
+        "description": "Truncation mode for controlling output size."
+      },
+      "truncate_limit": {
+        "type": "integer",
+        "description": "Limit for truncation mode."
+      },
+      "output_format": {
+        "type": "string",
+        "enum": ["markdown", "json"],
+        "default": "markdown",
+        "description": "Output format: markdown (default) or json."
       }
     }
   }
@@ -172,10 +204,17 @@ Images automatically use OCR to extract visible text - no extra parameters neede
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `content` | string | Yes | Base64-encoded file data |
-| `filename` | string | Yes | Filename with extension (e.g., 'report.pdf', 'chart.png') |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `content` | string | Yes | - | Base64-encoded file data |
+| `filename` | string | Yes | - | Filename with extension (e.g., 'report.pdf', 'chart.png') |
+| `max_length` | integer | No | - | Maximum characters to return. Content is truncated if exceeded. |
+| `max_tokens` | integer | No | - | Maximum tokens to return (uses tiktoken cl100k_base encoding). |
+| `truncate_mode` | string | No | - | Truncation mode: `chars`, `tokens`, `sections`, or `paragraphs`. |
+| `truncate_limit` | integer | No | - | Limit for truncation mode (count of chars/tokens/sections/paragraphs). |
+| `timeout` | integer | No | - | Timeout in seconds for the conversion operation. |
+| `include_frontmatter` | boolean | No | true | Include YAML frontmatter with metadata in the output. |
+| `output_format` | string | No | markdown | Output format: `markdown` (raw text) or `json` (structured response). |
 
 #### Schema
 
@@ -193,6 +232,25 @@ Images automatically use OCR to extract visible text - no extra parameters neede
       "filename": {
         "type": "string",
         "description": "Filename with extension (e.g., 'report.pdf', 'chart.png')"
+      },
+      "max_tokens": {
+        "type": "integer",
+        "description": "Maximum tokens to return (uses tiktoken cl100k_base encoding)."
+      },
+      "truncate_mode": {
+        "type": "string",
+        "enum": ["chars", "tokens", "sections", "paragraphs"],
+        "description": "Truncation mode for controlling output size."
+      },
+      "truncate_limit": {
+        "type": "integer",
+        "description": "Limit for truncation mode."
+      },
+      "output_format": {
+        "type": "string",
+        "enum": ["markdown", "json"],
+        "default": "markdown",
+        "description": "Output format: markdown (default) or json."
       }
     }
   }
@@ -201,29 +259,64 @@ Images automatically use OCR to extract visible text - no extra parameters neede
 
 ## Response Format
 
-Both tools return structured JSON responses.
+By default, both tools return **raw markdown** with YAML frontmatter. Set `output_format: "json"` for structured JSON responses.
 
-### Success Response
+### Markdown Response (Default)
+
+When `output_format` is `"markdown"` (or not specified), the tool returns raw markdown text:
+
+```markdown
+---
+title: "Article Title"
+source: "https://example.com/article"
+word_count: 1523
+---
+
+# Article Title
+
+Markdown content here...
+```
+
+This format is ideal for direct use by LLMs—the frontmatter provides context while the content is immediately usable.
+
+### JSON Response
+
+When `output_format: "json"`, the tool returns a structured response:
 
 ```json
 {
   "success": true,
   "title": "Article Title",
-  "content": "# Article Title\n\nMarkdown content here...",
+  "markdown": "# Article Title\n\nMarkdown content here...",
   "source": "https://example.com/article",
   "word_count": 1523,
   "metadata": {
-    "author": "Jane Doe",
     "description": "A brief summary of the article",
-    "published": "2024-03-15",
     "language": "en",
     "format": "text/html",
-    "ocr_applied": false
+    "ocr_applied": false,
+    "was_truncated": true,
+    "original_length": 45000,
+    "original_tokens": 12000,
+    "truncation_mode": "tokens"
   }
 }
 ```
 
+### Truncation Metadata
+
+When content is truncated, the metadata includes:
+
+| Field | Description |
+|-------|-------------|
+| `was_truncated` | `true` if content was truncated |
+| `original_length` | Original character count before truncation |
+| `original_tokens` | Original token count before truncation |
+| `truncation_mode` | Mode used: `chars`, `tokens`, `sections`, or `paragraphs` |
+
 ### Error Response
+
+Errors always return JSON:
 
 ```json
 {
@@ -280,6 +373,20 @@ The AI will use `render_js: true` for dynamic content.
 > "Extract the text from this screenshot"
 
 Images are automatically processed with OCR - no special options needed.
+
+### Controlling Output Size
+
+For large documents, use truncation to limit the response:
+
+> "Read this documentation, limiting to 4000 tokens"
+
+The AI will use `max_tokens: 4000` to fit within context limits.
+
+For markdown-aware truncation:
+
+> "Get the first 5 sections from this article"
+
+Uses `truncate_mode: "sections"` and `truncate_limit: 5` to return complete sections.
 
 ## Troubleshooting
 

@@ -2,7 +2,7 @@
 
 import mimetypes
 import os
-from typing import Union
+from typing import Optional, Union
 
 from .models import MCPSuccessResponse, MCPErrorResponse, MCPMetadata
 from .errors import (
@@ -39,7 +39,14 @@ async def handle_read_url(
     converter: DocumentConverter,
     url: str,
     render_js: bool = False,
-) -> Union[MCPSuccessResponse, MCPErrorResponse]:
+    max_length: Optional[int] = None,
+    max_tokens: Optional[int] = None,
+    truncate_mode: Optional[str] = None,
+    truncate_limit: Optional[int] = None,
+    timeout: Optional[int] = None,
+    include_frontmatter: bool = True,
+    output_format: str = "markdown",
+) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
     """
     Handle read_url tool call.
 
@@ -47,20 +54,41 @@ async def handle_read_url(
         converter: DocumentConverter instance
         url: URL to fetch and convert
         render_js: Whether to render JavaScript before extraction
+        max_length: Maximum characters to return (truncates if exceeded)
+        max_tokens: Maximum tokens to return (uses tiktoken cl100k_base encoding)
+        truncate_mode: Truncation mode (chars, tokens, sections, paragraphs)
+        truncate_limit: Limit for truncation mode
+        timeout: Timeout in seconds for conversion (uses converter default if None)
+        include_frontmatter: Include YAML frontmatter with metadata
+        output_format: Output format - "markdown" (default) or "json"
 
     Returns:
-        MCPSuccessResponse on success, MCPErrorResponse on failure
+        Raw markdown string when output_format="markdown",
+        MCPSuccessResponse when output_format="json",
+        MCPErrorResponse on failure (always JSON)
     """
     # Validate URL format
     if not url.startswith(("http://", "https://")):
         return invalid_url_error(url)
 
     try:
-        result = await converter.convert_url(
-            url,
-            js_rendering=render_js,
-            include_frontmatter=True,  # Always extract metadata
-        )
+        # Build options dict, only include timeout if explicitly set
+        options: dict = {
+            "js_rendering": render_js,
+            "include_frontmatter": include_frontmatter,
+        }
+        if max_length is not None:
+            options["max_length"] = max_length
+        if max_tokens is not None:
+            options["max_tokens"] = max_tokens
+        if truncate_mode is not None:
+            options["truncate_mode"] = truncate_mode
+        if truncate_limit is not None:
+            options["truncate_limit"] = truncate_limit
+        if timeout is not None:
+            options["timeout"] = timeout
+
+        result = await converter.convert_url(url, **options)
 
         word_count = len(result.markdown.split())
 
@@ -68,14 +96,23 @@ async def handle_read_url(
         if word_count < MIN_WORD_COUNT:
             return content_empty_error(url, tried_js=render_js)
 
+        # Return raw markdown by default
+        if output_format == "markdown":
+            return result.markdown
+
+        # Return structured JSON response
         return MCPSuccessResponse(
             title=result.metadata.title or _extract_title_from_url(url),
-            content=result.markdown,
+            markdown=result.markdown,
             source=url,
             word_count=word_count,
             metadata=MCPMetadata(
                 description=None,  # Could be extracted from meta tags
                 language=result.metadata.detected_language,
+                was_truncated=result.metadata.was_truncated or None,
+                original_length=result.metadata.original_length,
+                original_tokens=result.metadata.original_tokens,
+                truncation_mode=result.metadata.truncation_mode,
             ),
         )
 
@@ -111,7 +148,14 @@ async def handle_read_file(
     converter: DocumentConverter,
     content: bytes,
     filename: str,
-) -> Union[MCPSuccessResponse, MCPErrorResponse]:
+    max_length: Optional[int] = None,
+    max_tokens: Optional[int] = None,
+    truncate_mode: Optional[str] = None,
+    truncate_limit: Optional[int] = None,
+    timeout: Optional[int] = None,
+    include_frontmatter: bool = True,
+    output_format: str = "markdown",
+) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
     """
     Handle read_file tool call.
 
@@ -119,9 +163,18 @@ async def handle_read_file(
         converter: DocumentConverter instance
         content: File content as bytes
         filename: Original filename with extension
+        max_length: Maximum characters to return (truncates if exceeded)
+        max_tokens: Maximum tokens to return (uses tiktoken cl100k_base encoding)
+        truncate_mode: Truncation mode (chars, tokens, sections, paragraphs)
+        truncate_limit: Limit for truncation mode
+        timeout: Timeout in seconds for conversion (uses converter default if None)
+        include_frontmatter: Include YAML frontmatter with metadata
+        output_format: Output format - "markdown" (default) or "json"
 
     Returns:
-        MCPSuccessResponse on success, MCPErrorResponse on failure
+        Raw markdown string when output_format="markdown",
+        MCPSuccessResponse when output_format="json",
+        MCPErrorResponse on failure (always JSON)
     """
     ext = os.path.splitext(filename)[1].lower()
     is_image = ext in IMAGE_EXTENSIONS
@@ -132,19 +185,35 @@ async def handle_read_file(
         return file_too_large_error(size_mb, converter.max_file_size_mb)
 
     try:
-        result = await converter.convert_content(
-            content,
-            filename=filename,
-            include_frontmatter=True,
-            ocr_enabled=is_image,  # Auto-enable OCR for images
-        )
+        # Build options dict
+        options: dict = {
+            "include_frontmatter": include_frontmatter,
+            "ocr_enabled": is_image,  # Auto-enable OCR for images
+        }
+        if max_length is not None:
+            options["max_length"] = max_length
+        if max_tokens is not None:
+            options["max_tokens"] = max_tokens
+        if truncate_mode is not None:
+            options["truncate_mode"] = truncate_mode
+        if truncate_limit is not None:
+            options["truncate_limit"] = truncate_limit
+        if timeout is not None:
+            options["timeout"] = timeout
 
+        result = await converter.convert_content(content, filename=filename, **options)
+
+        # Return raw markdown by default
+        if output_format == "markdown":
+            return result.markdown
+
+        # Return structured JSON response
         word_count = len(result.markdown.split())
         mime_type, _ = mimetypes.guess_type(filename)
 
         return MCPSuccessResponse(
             title=result.metadata.title or filename,
-            content=result.markdown,
+            markdown=result.markdown,
             source=filename,
             word_count=word_count,
             metadata=MCPMetadata(
@@ -152,6 +221,10 @@ async def handle_read_file(
                 format=mime_type or result.metadata.detected_format,
                 ocr_applied=is_image,
                 language=result.metadata.detected_language,
+                was_truncated=result.metadata.was_truncated or None,
+                original_length=result.metadata.original_length,
+                original_tokens=result.metadata.original_tokens,
+                truncation_mode=result.metadata.truncation_mode,
             ),
         )
 

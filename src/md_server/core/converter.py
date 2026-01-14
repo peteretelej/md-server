@@ -14,7 +14,8 @@ from .errors import (
     URLTimeoutError,
 )
 from ..metadata import MetadataExtractor
-from ..models import ConversionResult, ConversionMetadata
+from ..metadata.extractor import estimate_tokens
+from ..models import ConversionResult, ConversionMetadata, TruncationInfo
 from ..security import validate_url
 
 logger = get_logger("core.converter")
@@ -79,13 +80,16 @@ class DocumentConverter:
 
         detected_format = self._detect_format(content, filename)
 
+        truncation_info = TruncationInfo()
         if detected_format == "application/octet-stream":
             if content.startswith(b"MZ"):
                 markdown = f"**Executable file detected**: {filename}\n\nThis appears to be an executable file and cannot be converted to text. Executable files are not supported for conversion."
             else:
                 markdown = f"**Binary file detected**: {filename}\n\nThis appears to be a binary file and cannot be converted to text. Binary files are not supported for conversion."
         else:
-            markdown = await self._convert_content_async(content, filename, options)
+            markdown, truncation_info = await self._convert_content_async(
+                content, filename, options
+            )
 
         include_frontmatter = options.get("include_frontmatter", False)
         if include_frontmatter:
@@ -108,6 +112,12 @@ class DocumentConverter:
             title=extracted.title,
             estimated_tokens=extracted.estimated_tokens,
             detected_language=extracted.detected_language,
+            was_truncated=truncation_info.was_truncated,
+            original_length=truncation_info.original_length
+            if truncation_info.was_truncated
+            else None,
+            original_tokens=truncation_info.original_tokens,
+            truncation_mode=truncation_info.truncation_mode,
         )
 
         return ConversionResult(
@@ -138,6 +148,9 @@ class DocumentConverter:
             markdown = await self._convert_url_with_markitdown(url)
             source_size = len(markdown)
 
+        # Apply truncation and other options
+        markdown, truncation_info = self._apply_options(markdown, options)
+
         include_frontmatter = options.get("include_frontmatter", False)
         if include_frontmatter:
             markdown, extracted = self._metadata_extractor.with_frontmatter(
@@ -159,6 +172,12 @@ class DocumentConverter:
             title=extracted.title,
             estimated_tokens=extracted.estimated_tokens,
             detected_language=extracted.detected_language,
+            was_truncated=truncation_info.was_truncated,
+            original_length=truncation_info.original_length
+            if truncation_info.was_truncated
+            else None,
+            original_tokens=truncation_info.original_tokens,
+            truncation_mode=truncation_info.truncation_mode,
         )
 
         return ConversionResult(
@@ -179,7 +198,9 @@ class DocumentConverter:
             )
 
         detected_format = self._detect_format(content, filename)
-        markdown = await self._convert_content_async(content, filename, options)
+        markdown, truncation_info = await self._convert_content_async(
+            content, filename, options
+        )
 
         include_frontmatter = options.get("include_frontmatter", False)
         if include_frontmatter:
@@ -202,6 +223,12 @@ class DocumentConverter:
             title=extracted.title,
             estimated_tokens=extracted.estimated_tokens,
             detected_language=extracted.detected_language,
+            was_truncated=truncation_info.was_truncated,
+            original_length=truncation_info.original_length
+            if truncation_info.was_truncated
+            else None,
+            original_tokens=truncation_info.original_tokens,
+            truncation_mode=truncation_info.truncation_mode,
         )
 
         return ConversionResult(
@@ -219,13 +246,12 @@ class DocumentConverter:
 
         if mime_type == "text/markdown":
             markdown = text
+            # Apply options (truncation, clean_markdown) for markdown input
+            markdown, truncation_info = self._apply_options(markdown, options)
         else:
-            markdown = await self._convert_text_with_mime_type_async(
+            markdown, truncation_info = await self._convert_text_with_mime_type_async(
                 text, mime_type, options
             )
-
-        if self.clean_markdown:
-            markdown = self._clean_markdown(markdown)
 
         include_frontmatter = options.get("include_frontmatter", False)
         if include_frontmatter:
@@ -248,6 +274,12 @@ class DocumentConverter:
             title=extracted.title,
             estimated_tokens=extracted.estimated_tokens,
             detected_language=extracted.detected_language,
+            was_truncated=truncation_info.was_truncated,
+            original_length=truncation_info.original_length
+            if truncation_info.was_truncated
+            else None,
+            original_tokens=truncation_info.original_tokens,
+            truncation_mode=truncation_info.truncation_mode,
         )
 
         return ConversionResult(
@@ -261,7 +293,7 @@ class DocumentConverter:
         content: bytes,
         filename: Optional[str] = None,
         options: Optional[Dict[str, Any]] = None,
-    ) -> str:
+    ) -> tuple[str, TruncationInfo]:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None, self._sync_convert_content, content, filename, options
@@ -269,7 +301,7 @@ class DocumentConverter:
 
     async def _convert_text_with_mime_type_async(
         self, text: str, mime_type: str, options: Optional[Dict[str, Any]] = None
-    ) -> str:
+    ) -> tuple[str, TruncationInfo]:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None, self._sync_convert_text_with_mime_type, text, mime_type, options
@@ -326,7 +358,7 @@ class DocumentConverter:
         content: bytes,
         filename: Optional[str] = None,
         options: Optional[Dict[str, Any]] = None,
-    ) -> str:
+    ) -> tuple[str, TruncationInfo]:
         # Check if this is audio content that requires ffmpeg
         detected_format = self._detect_format(content, filename)
         if detected_format in AUDIO_MIME_TYPES and not _is_ffmpeg_available():
@@ -345,7 +377,7 @@ class DocumentConverter:
 
     def _sync_convert_text_with_mime_type(
         self, text: str, mime_type: str, options: Optional[Dict[str, Any]] = None
-    ) -> str:
+    ) -> tuple[str, TruncationInfo]:
         text_bytes = text.encode("utf-8")
         stream_info = StreamInfo(mimetype=mime_type)
 
@@ -372,17 +404,144 @@ class DocumentConverter:
         path = Path(filename)
         return StreamInfo(extension=path.suffix.lower(), filename=filename)
 
-    def _apply_options(self, markdown: str, options: Optional[Dict[str, Any]]) -> str:
+    def _safe_truncate(self, markdown: str, target_length: int) -> tuple[str, bool]:
+        """
+        Truncate at safe markdown boundaries.
+
+        Avoids breaking inside code blocks or mid-paragraph when possible.
+
+        Args:
+            markdown: Content to truncate
+            target_length: Target character length
+
+        Returns:
+            Tuple of (truncated_content, was_truncated)
+        """
+        if len(markdown) <= target_length:
+            return markdown, False
+
+        truncated = markdown[:target_length]
+
+        # Rule 1: Don't break inside code blocks (odd fence count = unclosed)
+        fence_count = truncated.count("```")
+        if fence_count % 2 == 1:
+            last_fence = truncated.rfind("```")
+            truncated = truncated[:last_fence].rstrip()
+
+        # Rule 2: Prefer paragraph boundaries in final 30%
+        search_start = int(len(truncated) * 0.7)
+        if search_start > 0:
+            search_region = truncated[search_start:]
+            last_break = search_region.rfind("\n\n")
+            if last_break != -1:
+                truncated = truncated[: search_start + last_break]
+
+        return truncated.rstrip(), True
+
+    def _apply_options(
+        self, markdown: str, options: Optional[Dict[str, Any]]
+    ) -> tuple[str, TruncationInfo]:
+        info = TruncationInfo()
+        info.original_length = len(markdown)
+
         if not options:
-            return markdown
+            info.final_length = len(markdown)
+            return markdown, info
 
         if options.get("clean_markdown", self.clean_markdown):
             markdown = self._clean_markdown(markdown)
 
-        if options.get("max_length") and len(markdown) > options["max_length"]:
-            markdown = markdown[: options["max_length"]] + "..."
+        # New truncation modes (truncate_mode + truncate_limit)
+        mode = options.get("truncate_mode")
+        limit = options.get("truncate_limit")
 
-        return markdown
+        # Track original tokens for token-based modes
+        if mode == "tokens" or options.get("max_tokens"):
+            info.original_tokens = estimate_tokens(markdown)
+
+        if mode and limit:
+            if mode == "sections":
+                result, was_truncated = self._truncate_by_sections(markdown, limit)
+                if was_truncated:
+                    info.was_truncated = True
+                    info.truncation_mode = "sections"
+                markdown = result
+            elif mode == "paragraphs":
+                result, was_truncated = self._truncate_by_paragraphs(markdown, limit)
+                if was_truncated:
+                    info.was_truncated = True
+                    info.truncation_mode = "paragraphs"
+                markdown = result
+            elif mode == "tokens":
+                current = info.original_tokens or estimate_tokens(markdown)
+                if current > limit:
+                    ratio = limit / current
+                    truncate_at = int(len(markdown) * ratio * 0.95)
+                    content, _ = self._safe_truncate(markdown, truncate_at)
+                    info.was_truncated = True
+                    info.truncation_mode = "tokens"
+                    markdown = self._append_truncation_indicator(content, info)
+            elif mode == "chars":
+                if len(markdown) > limit:
+                    content, _ = self._safe_truncate(markdown, limit)
+                    info.was_truncated = True
+                    info.truncation_mode = "chars"
+                    markdown = self._append_truncation_indicator(content, info)
+        else:
+            # Backwards compat: max_length still works
+            if options.get("max_length") and len(markdown) > options["max_length"]:
+                content, _ = self._safe_truncate(markdown, options["max_length"])
+                info.was_truncated = True
+                info.truncation_mode = "chars"
+                markdown = content + "..."
+
+            # Token-based truncation (legacy max_tokens)
+            if options.get("max_tokens"):
+                target = options["max_tokens"]
+                current = info.original_tokens or estimate_tokens(markdown)
+                if current > target:
+                    ratio = target / current
+                    truncate_at = int(len(markdown) * ratio * 0.95)
+                    content, _ = self._safe_truncate(markdown, truncate_at)
+                    info.was_truncated = True
+                    info.truncation_mode = "tokens"
+                    markdown = self._append_truncation_indicator(content, info)
+
+        info.final_length = len(markdown)
+        if info.was_truncated and info.truncation_mode == "tokens":
+            info.final_tokens = estimate_tokens(markdown)
+
+        return markdown, info
+
+    def _append_truncation_indicator(self, content: str, info: TruncationInfo) -> str:
+        """Append a truncation indicator with size information."""
+        if info.truncation_mode == "tokens" and info.original_tokens:
+            # Estimate final tokens for the indicator
+            final_tokens = estimate_tokens(content)
+            indicator = (
+                f"[truncated: ~{info.original_tokens} -> ~{final_tokens} tokens]"
+            )
+        else:
+            indicator = f"[truncated: {info.original_length} -> {len(content)} chars]"
+        return content.rstrip() + f"\n\n{indicator}"
+
+    def _truncate_by_sections(self, markdown: str, limit: int) -> tuple[str, bool]:
+        """Return first N markdown sections (split by ## headings)."""
+        import re
+
+        parts = re.split(r"\n(?=## )", markdown)
+        if len(parts) <= limit + 1:  # +1 for content before first ##
+            return markdown, False
+        result = "\n".join(parts[: limit + 1])
+        return result.rstrip() + "\n\n[truncated...]", True
+
+    def _truncate_by_paragraphs(self, markdown: str, limit: int) -> tuple[str, bool]:
+        """Return first N paragraphs (split by blank lines)."""
+        parts = markdown.split("\n\n")
+        if len(parts) <= limit:
+            return markdown, False
+        result = "\n\n".join(parts[:limit])
+        return result.rstrip() + "\n\n[truncated...]", True
 
     def _detect_format(self, content: bytes, filename: Optional[str] = None) -> str:
         format_map = {

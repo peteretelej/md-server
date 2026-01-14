@@ -59,7 +59,7 @@ class TestMCPSuccessResponse:
         """Success should be True by default."""
         response = MCPSuccessResponse(
             title="Test",
-            content="# Test",
+            markdown="# Test",
             source="test.pdf",
             word_count=1,
             metadata=MCPMetadata(),
@@ -75,7 +75,7 @@ class TestMCPSuccessResponse:
         """Should serialize to dict correctly."""
         response = MCPSuccessResponse(
             title="Test Title",
-            content="# Content",
+            markdown="# Content",
             source="https://example.com",
             word_count=100,
             metadata=MCPMetadata(author="Author"),
@@ -83,7 +83,7 @@ class TestMCPSuccessResponse:
         data = response.model_dump()
         assert data["success"] is True
         assert data["title"] == "Test Title"
-        assert data["content"] == "# Content"
+        assert data["markdown"] == "# Content"
         assert data["source"] == "https://example.com"
         assert data["word_count"] == 100
         assert data["metadata"]["author"] == "Author"
@@ -92,7 +92,7 @@ class TestMCPSuccessResponse:
         """Should serialize to JSON correctly."""
         response = MCPSuccessResponse(
             title="T",
-            content="C",
+            markdown="C",
             source="S",
             word_count=1,
             metadata=MCPMetadata(),
@@ -100,13 +100,13 @@ class TestMCPSuccessResponse:
         json_str = response.model_dump_json()
         assert "true" in json_str  # success: true
         assert '"title"' in json_str
-        assert '"content"' in json_str
+        assert '"markdown"' in json_str
 
     def test_default_metadata(self):
         """Should use empty metadata by default."""
         response = MCPSuccessResponse(
             title="T",
-            content="C",
+            markdown="C",
             source="S",
             word_count=1,
         )

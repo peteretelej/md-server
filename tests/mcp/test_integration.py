@@ -24,24 +24,32 @@ class TestMCPServerIntegration:
 
     @pytest.mark.asyncio
     async def test_call_read_url_success(self):
-        """call_tool should handle read_url successfully."""
+        """call_tool should handle read_url successfully with JSON format."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
+            mock_metadata = MagicMock(
+                title="Test Page",
+                detected_language="en",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
             mock_conv.convert_url = AsyncMock(
                 return_value=MagicMock(
                     markdown="# Test content with more than five words here",
-                    metadata=MagicMock(
-                        title="Test Page",
-                        detected_language="en",
-                    ),
+                    metadata=mock_metadata,
                 )
             )
             mock_get.return_value = mock_conv
 
-            result = await call_tool("read_url", {"url": "https://example.com"})
+            result = await call_tool(
+                "read_url",
+                {"url": "https://example.com", "output_format": "json"},
+            )
 
             assert len(result) == 1
             data = json.loads(result[0].text)
@@ -72,76 +80,69 @@ class TestMCPServerIntegration:
             assert call_kwargs["js_rendering"] is True
 
     @pytest.mark.asyncio
-    async def test_call_read_url_missing_url(self):
-        """call_tool should return error for missing URL."""
-        from md_server.mcp.server import call_tool
-
-        result = await call_tool("read_url", {})
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
-
-    @pytest.mark.asyncio
     async def test_call_read_file_success(self):
-        """call_tool should handle read_file successfully."""
+        """call_tool should handle read_file successfully with JSON format."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
             mock_conv.max_file_size_mb = 50
+            mock_metadata = MagicMock(
+                title="Document",
+                detected_language=None,
+                detected_format="application/pdf",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
             mock_conv.convert_content = AsyncMock(
                 return_value=MagicMock(
                     markdown="# PDF Content with enough words here",
-                    metadata=MagicMock(
-                        title="Document",
-                        detected_language=None,
-                    ),
+                    metadata=mock_metadata,
                 )
             )
             mock_get.return_value = mock_conv
 
             content_b64 = base64.b64encode(b"fake pdf data").decode()
             result = await call_tool(
-                "read_file", {"content": content_b64, "filename": "test.pdf"}
+                "read_file",
+                {
+                    "content": content_b64,
+                    "filename": "test.pdf",
+                    "output_format": "json",
+                },
             )
 
             data = json.loads(result[0].text)
             assert data["success"] is True
             assert data["source"] == "test.pdf"
 
-    @pytest.mark.asyncio
-    async def test_call_read_file_missing_content(self):
-        """call_tool should return error for missing content."""
-        from md_server.mcp.server import call_tool
-
-        result = await call_tool("read_file", {"filename": "test.pdf"})
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
+    # --- Input Validation Error Tests (consolidated) ---
 
     @pytest.mark.asyncio
-    async def test_call_read_file_missing_filename(self):
-        """call_tool should return error for missing filename."""
+    @pytest.mark.parametrize(
+        "tool_name,args",
+        [
+            ("read_url", {}),  # missing URL
+            ("read_file", {"filename": "test.pdf"}),  # missing content
+            (
+                "read_file",
+                {"content": base64.b64encode(b"data").decode()},
+            ),  # missing filename
+            (
+                "read_file",
+                {"content": "not-valid-base64!!!", "filename": "test.pdf"},
+            ),  # invalid base64
+        ],
+        ids=["missing_url", "missing_content", "missing_filename", "invalid_base64"],
+    )
+    async def test_invalid_input_returns_error(self, tool_name, args):
+        """call_tool should return error for invalid inputs."""
         from md_server.mcp.server import call_tool
 
-        content_b64 = base64.b64encode(b"data").decode()
-        result = await call_tool("read_file", {"content": content_b64})
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
-
-    @pytest.mark.asyncio
-    async def test_call_read_file_invalid_base64(self):
-        """call_tool should return error for invalid base64."""
-        from md_server.mcp.server import call_tool
-
-        result = await call_tool(
-            "read_file", {"content": "not-valid-base64!!!", "filename": "test.pdf"}
-        )
+        result = await call_tool(tool_name, args)
 
         data = json.loads(result[0].text)
         assert data["success"] is False
@@ -180,27 +181,38 @@ class TestMCPResponseFormat:
 
     @pytest.mark.asyncio
     async def test_success_response_structure(self):
-        """Success responses should have consistent structure."""
+        """Success responses (JSON format) should have consistent structure."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
+            mock_metadata = MagicMock(
+                title="Title",
+                detected_language="en",
+                was_truncated=False,
+                original_length=None,
+                original_tokens=None,
+                truncation_mode=None,
+            )
             mock_conv.convert_url = AsyncMock(
                 return_value=MagicMock(
                     markdown="# Content with more than five words today",
-                    metadata=MagicMock(title="Title", detected_language="en"),
+                    metadata=mock_metadata,
                 )
             )
             mock_get.return_value = mock_conv
 
-            result = await call_tool("read_url", {"url": "https://example.com"})
+            result = await call_tool(
+                "read_url",
+                {"url": "https://example.com", "output_format": "json"},
+            )
 
             data = json.loads(result[0].text)
             # Check required fields
             assert "success" in data
             assert "title" in data
-            assert "content" in data
+            assert "markdown" in data
             assert "source" in data
             assert "word_count" in data
             assert "metadata" in data

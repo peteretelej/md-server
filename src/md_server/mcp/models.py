@@ -14,6 +14,10 @@ class MCPMetadata(BaseModel):
     pages: Optional[int] = None
     format: Optional[str] = None
     ocr_applied: Optional[bool] = None
+    was_truncated: Optional[bool] = None
+    original_length: Optional[int] = None
+    original_tokens: Optional[int] = None
+    truncation_mode: Optional[str] = None
 
 
 class MCPSuccessResponse(BaseModel):
@@ -21,7 +25,7 @@ class MCPSuccessResponse(BaseModel):
 
     success: bool = Field(default=True)
     title: str
-    content: str
+    markdown: str
     source: str
     word_count: int
     metadata: MCPMetadata = Field(default_factory=MCPMetadata)
