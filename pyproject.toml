@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-server"
-version = "0.1.7"
-description = "HTTP API server for converting documents, web pages, and media to markdown"
+version = "0.1.8"
+description = "HTTP API and MCP server for converting documents, web pages, and media to markdown"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -17,7 +17,7 @@ maintainers = [
     {name = "Peter Etelej", email = "peter@etelej.com"}
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
     "Topic :: Text Processing :: Markup",
