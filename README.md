@@ -20,7 +20,10 @@ Under the hood, it uses Microsoft's MarkItDown for document conversion and Crawl
 
 ## HTTP API
 
-**Prerequisite:** Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first.
+**Prerequisites:**
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- _(Optional)_ Install browser for JavaScript-rendered pages: `uvx playwright install --with-deps chromium`
 
 ```bash
 # Starts server at localhost:8080
@@ -44,7 +47,10 @@ curl -X POST localhost:8080/convert \
 
 md-server runs as a local [MCP server](https://modelcontextprotocol.io), giving AI assistants like Claude Desktop, Cursor, Copilot, and OpenCode the ability to read documents and web pages directly.
 
-**Prerequisite:** Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first.
+**Prerequisites:**
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- _(Optional)_ Install browser for JavaScript-rendered pages: `uvx playwright install --with-deps chromium`
 
 Add to your MCP configuration:
 
@@ -59,35 +65,19 @@ Add to your MCP configuration:
 }
 ```
 
-The first run downloads dependencies and may take a minute. For JavaScript rendering support, install Playwright browsers: `uvx playwright install chromium --with-deps`
+The first run downloads dependencies and may take a minute.
 
-Once configured, your AI gets two tools:
+Once configured, your AI gets the **`read_resource`** tool:
 
-- **`read_url`** — Fetch and read web pages, articles, documentation, online PDFs
-- **`read_file`** — Read uploaded documents with auto-OCR for images
+- Fetch web pages, articles, documentation, online PDFs via URL
+- Read uploaded documents (PDF, DOCX, XLSX, PPTX, images with OCR)
+- Supports token-based truncation and markdown-aware sectioning
 
-Both tools support token-based truncation, markdown-aware sectioning, and output format control. See [MCP Integration Guide](docs/mcp-guide.md) for all options.
+See [MCP Guide](docs/mcp.md) for all options and troubleshooting.
 
-Example prompts:
+## HTTP API Server Installation
 
-> "Read the Python asyncio documentation and summarize it"
-> "What's in this PDF?" _(with file attached)_
-> "Read this article: https://example.com/news"
-> "Extract text from this screenshot"
-
-### MCP Modes
-
-```bash
-# For local AI tools (Claude Desktop, Cursor)
-uvx md-server[mcp] --mcp-stdio
-
-# For network-based AI agents
-uvx md-server[mcp] --mcp-sse --port 9000
-```
-
-See [MCP Integration Guide](docs/mcp-guide.md) for complete setup instructions and troubleshooting.
-
-## Installation
+For MCP server setup (AI tools), see [MCP Server](#mcp-server-for-ai-assistants) above.
 
 ### Using uvx (Recommended)
 
@@ -97,17 +87,14 @@ uvx md-server
 
 ### Using Docker
 
-You can run on Docker using the [md-server docker image](https://github.com/peteretelej/md-server/pkgs/container/md-server). The Docker image includes full browser support for JavaScript rendering.
+The [Docker image](https://github.com/peteretelej/md-server/pkgs/container/md-server) includes browser support for JavaScript rendering.
 
 ```bash
 docker run -p 127.0.0.1:8080:8080 ghcr.io/peteretelej/md-server
 ```
 
-**Resource Requirements:**
-
 - Memory: 1GB recommended (minimum 512MB)
 - Storage: ~1.2GB image size
-- Initial startup: 10-15 seconds (browser initialization)
 
 ## API
 
@@ -203,18 +190,17 @@ curl localhost:8080/health
 
 ## Advanced Usage
 
-### Enhanced URL Conversion
+### JavaScript-Rendered Pages
 
-**Docker deployments** include full browser support automatically - JavaScript rendering is enabled out of the box.
+**Docker** includes browser support out of the box.
 
-**Local installations** use MarkItDown for URL conversion by default. To enable **Crawl4AI** with JavaScript rendering:
+**Local installations** use MarkItDown for URL conversion by default. To read pages that require JavaScript (SPAs, dashboards, interactive apps):
 
 ```bash
-uvx playwright install-deps
-uvx playwright install chromium
+uvx playwright install --with-deps chromium
 ```
 
-When browsers are available, md-server automatically uses Crawl4AI for better handling of JavaScript-heavy sites, smart content extraction, and enhanced web crawling capabilities.
+When a browser is available, md-server automatically uses Crawl4AI for these pages.
 
 ### Pipe from Other Commands
 
@@ -275,7 +261,7 @@ Errors include actionable information:
 Full documentation is available in the [docs](docs/) directory:
 
 - [API Reference](docs/API.md) - HTTP endpoints, options, and responses
-- [MCP Integration](docs/mcp-guide.md) - Claude Desktop, Cursor, and AI tool setup
+- [MCP Guide](docs/mcp.md) - Claude Desktop, Cursor, and AI tool setup
 - [Python SDK](docs/sdk/README.md) - Library usage for Python applications
 - [Configuration](docs/configuration.md) - Environment variables reference
 - [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
