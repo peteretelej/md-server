@@ -13,36 +13,43 @@ class TestMCPServer:
     """Test MCP server functionality."""
 
     @pytest.mark.asyncio
-    async def test_list_tools_returns_two(self):
-        """list_tools should return read_url and read_file tools."""
+    async def test_list_tools_returns_one(self):
+        """list_tools should return read_resource tool."""
         tools = await list_tools()
-        assert len(tools) == 2
-        names = [t.name for t in tools]
-        assert "read_url" in names
-        assert "read_file" in names
+        assert len(tools) == 1
+        assert tools[0].name == "read_resource"
 
     @pytest.mark.asyncio
-    async def test_list_tools_have_output_format(self):
-        """Tools should have output_format parameter."""
+    async def test_list_tools_has_output_format(self):
+        """Tool should have output_format parameter."""
         tools = await list_tools()
-        for tool in tools:
-            props = tool.inputSchema.get("properties", {})
-            assert "output_format" in props
-            assert props["output_format"]["default"] == "markdown"
-            assert props["output_format"]["enum"] == ["markdown", "json"]
+        tool = tools[0]
+        props = tool.inputSchema.get("properties", {})
+        assert "output_format" in props
+        assert props["output_format"]["default"] == "markdown"
+        assert props["output_format"]["enum"] == ["markdown", "json"]
 
     @pytest.mark.asyncio
-    async def test_list_tools_have_new_options(self):
-        """Tools should have max_length, timeout, include_frontmatter parameters."""
+    async def test_list_tools_has_new_options(self):
+        """Tool should have max_length, timeout, include_frontmatter parameters."""
         tools = await list_tools()
-        for tool in tools:
-            props = tool.inputSchema.get("properties", {})
-            assert "max_length" in props, f"{tool.name} missing max_length"
-            assert "timeout" in props, f"{tool.name} missing timeout"
-            assert "include_frontmatter" in props, (
-                f"{tool.name} missing include_frontmatter"
-            )
-            assert props["include_frontmatter"]["default"] is True
+        tool = tools[0]
+        props = tool.inputSchema.get("properties", {})
+        assert "max_length" in props, "missing max_length"
+        assert "timeout" in props, "missing timeout"
+        assert "include_frontmatter" in props, "missing include_frontmatter"
+        assert props["include_frontmatter"]["default"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_tools_has_unified_inputs(self):
+        """Tool should have both url and file_content inputs."""
+        tools = await list_tools()
+        tool = tools[0]
+        props = tool.inputSchema.get("properties", {})
+        assert "url" in props
+        assert "file_content" in props
+        assert "filename" in props
+        assert "render_js" in props
 
     # --- Output Format Tests (consolidated) ---
 
@@ -56,8 +63,8 @@ class TestMCPServer:
         ],
         ids=["default_markdown", "explicit_markdown", "json"],
     )
-    async def test_read_url_output_format(self, output_format, is_json):
-        """read_url should return correct format based on output_format."""
+    async def test_read_resource_url_output_format(self, output_format, is_json):
+        """read_resource with url should return correct format based on output_format."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
@@ -81,7 +88,7 @@ class TestMCPServer:
             if output_format is not None:
                 args["output_format"] = output_format
 
-            result = await call_tool("read_url", args)
+            result = await call_tool("read_resource", args)
 
             assert len(result) == 1
             assert result[0].type == "text"
@@ -101,8 +108,8 @@ class TestMCPServer:
         ],
         ids=["default_markdown", "explicit_markdown", "json"],
     )
-    async def test_read_file_output_format(self, output_format, is_json):
-        """read_file should return correct format based on output_format."""
+    async def test_read_resource_file_output_format(self, output_format, is_json):
+        """read_resource with file_content should return correct format based on output_format."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_metadata = MagicMock()
             mock_metadata.title = "Doc"
@@ -125,11 +132,11 @@ class TestMCPServer:
             mock_get.return_value = mock_conv
 
             content = base64.b64encode(b"fake pdf content").decode()
-            args = {"content": content, "filename": "test.pdf"}
+            args = {"file_content": content, "filename": "test.pdf"}
             if output_format is not None:
                 args["output_format"] = output_format
 
-            result = await call_tool("read_file", args)
+            result = await call_tool("read_resource", args)
 
             assert len(result) == 1
             if is_json:
@@ -141,8 +148,8 @@ class TestMCPServer:
     # --- Parameter Passing Tests ---
 
     @pytest.mark.asyncio
-    async def test_read_url_passes_new_options(self):
-        """read_url should pass max_length, timeout, include_frontmatter to handler."""
+    async def test_read_resource_url_passes_new_options(self):
+        """read_resource with url should pass max_length, timeout, include_frontmatter to handler."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
@@ -155,7 +162,7 @@ class TestMCPServer:
             mock_get.return_value = mock_conv
 
             await call_tool(
-                "read_url",
+                "read_resource",
                 {
                     "url": "https://example.com",
                     "max_length": 100,
@@ -171,8 +178,8 @@ class TestMCPServer:
             assert call_kwargs["include_frontmatter"] is False
 
     @pytest.mark.asyncio
-    async def test_read_file_passes_new_options(self):
-        """read_file should pass max_length, timeout, include_frontmatter to handler."""
+    async def test_read_resource_file_passes_new_options(self):
+        """read_resource with file_content should pass max_length, timeout, include_frontmatter to handler."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_metadata = MagicMock()
             mock_metadata.title = "Doc"
@@ -192,9 +199,9 @@ class TestMCPServer:
 
             content = base64.b64encode(b"fake pdf content").decode()
             await call_tool(
-                "read_file",
+                "read_resource",
                 {
-                    "content": content,
+                    "file_content": content,
                     "filename": "test.pdf",
                     "max_length": 200,
                     "timeout": 45,
@@ -214,26 +221,39 @@ class TestMCPServer:
     @pytest.mark.parametrize(
         "tool_name,args,expected_code",
         [
-            ("read_url", {}, "INVALID_INPUT"),  # missing url
-            ("read_url", {"output_format": "markdown"}, "INVALID_INPUT"),  # missing url
-            ("read_file", {"filename": "test.pdf"}, "INVALID_INPUT"),  # missing content
+            # Neither url nor file_content
+            ("read_resource", {}, "INVALID_INPUT"),
+            ("read_resource", {"output_format": "markdown"}, "INVALID_INPUT"),
+            # file_content without filename
             (
-                "read_file",
-                {"content": base64.b64encode(b"data").decode()},
+                "read_resource",
+                {"file_content": base64.b64encode(b"data").decode()},
                 "INVALID_INPUT",
-            ),  # missing filename
+            ),
+            # Both url and file_content
             (
-                "read_file",
-                {"content": "not-valid-base64!!!", "filename": "test.pdf"},
+                "read_resource",
+                {
+                    "url": "https://example.com",
+                    "file_content": base64.b64encode(b"data").decode(),
+                    "filename": "test.pdf",
+                },
                 "INVALID_INPUT",
-            ),  # invalid base64
+            ),
+            # Invalid base64
+            (
+                "read_resource",
+                {"file_content": "not-valid-base64!!!", "filename": "test.pdf"},
+                "INVALID_INPUT",
+            ),
+            # Unknown tool
             ("unknown_tool", {}, "UNKNOWN_TOOL"),
         ],
         ids=[
-            "missing_url",
-            "missing_url_with_format",
-            "missing_content",
+            "missing_both",
+            "missing_both_with_format",
             "missing_filename",
+            "both_url_and_file",
             "invalid_base64",
             "unknown_tool",
         ],
@@ -253,8 +273,7 @@ class TestMCPServer:
         result = await call_tool("unknown_tool", {})
 
         data = json.loads(result[0].text)
-        assert "read_url" in str(data["error"]["suggestions"])
-        assert "read_file" in str(data["error"]["suggestions"])
+        assert "read_resource" in str(data["error"]["suggestions"])
 
 
 @pytest.mark.unit

@@ -11,7 +11,7 @@ from mcp.types import TextContent, Tool
 from ..core.converter import DocumentConverter
 from ..core.config import get_settings
 from .tools import TOOLS
-from .handlers import handle_read_url, handle_read_file
+from .handlers import handle_read_resource
 from .errors import unknown_tool_error, invalid_input_error
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     Handle MCP tool calls.
 
     Args:
-        name: Tool name ("read_url" or "read_file")
+        name: Tool name ("read_resource")
         arguments: Tool arguments
 
     Returns:
@@ -49,52 +49,34 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     converter = get_converter()
     output_format = arguments.get("output_format", "markdown")
 
-    if name == "read_url":
-        url = arguments.get("url")
-        if not url:
-            result = invalid_input_error("Missing required parameter: url")
-        else:
-            result = await handle_read_url(
-                converter=converter,
-                url=url,
-                render_js=arguments.get("render_js", False),
-                max_length=arguments.get("max_length"),
-                max_tokens=arguments.get("max_tokens"),
-                truncate_mode=arguments.get("truncate_mode"),
-                truncate_limit=arguments.get("truncate_limit"),
-                timeout=arguments.get("timeout"),
-                include_frontmatter=arguments.get("include_frontmatter", True),
-                output_format=output_format,
-            )
+    if name == "read_resource":
+        # Extract file_content and decode if present
+        file_content_b64 = arguments.get("file_content")
+        file_content = None
 
-    elif name == "read_file":
-        content_b64 = arguments.get("content")
-        filename = arguments.get("filename")
-
-        if not content_b64:
-            result = invalid_input_error("Missing required parameter: content")
-        elif not filename:
-            result = invalid_input_error("Missing required parameter: filename")
-        else:
+        if file_content_b64 is not None:
             try:
-                content = base64.b64decode(content_b64)
+                file_content = base64.b64decode(file_content_b64)
             except Exception:
                 result = invalid_input_error(
-                    "Invalid base64 content. Content must be base64-encoded."
+                    "Invalid base64 file_content. Content must be base64-encoded."
                 )
-            else:
-                result = await handle_read_file(
-                    converter=converter,
-                    content=content,
-                    filename=filename,
-                    max_length=arguments.get("max_length"),
-                    max_tokens=arguments.get("max_tokens"),
-                    truncate_mode=arguments.get("truncate_mode"),
-                    truncate_limit=arguments.get("truncate_limit"),
-                    timeout=arguments.get("timeout"),
-                    include_frontmatter=arguments.get("include_frontmatter", True),
-                    output_format=output_format,
-                )
+                return [TextContent(type="text", text=result.model_dump_json())]
+
+        result = await handle_read_resource(
+            converter=converter,
+            url=arguments.get("url"),
+            file_content=file_content,
+            filename=arguments.get("filename"),
+            render_js=arguments.get("render_js", False),
+            max_length=arguments.get("max_length"),
+            max_tokens=arguments.get("max_tokens"),
+            truncate_mode=arguments.get("truncate_mode"),
+            truncate_limit=arguments.get("truncate_limit"),
+            timeout=arguments.get("timeout"),
+            include_frontmatter=arguments.get("include_frontmatter", True),
+            output_format=output_format,
+        )
     else:
         result = unknown_tool_error(name)
 

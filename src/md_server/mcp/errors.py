@@ -151,7 +151,7 @@ def unknown_tool_error(name: str) -> MCPErrorResponse:
             code=ErrorCode.UNKNOWN_TOOL,
             message=f"Unknown tool: {name}",
             suggestions=[
-                "Available tools: read_url, read_file",
+                "Available tools: read_resource",
             ],
         )
     )

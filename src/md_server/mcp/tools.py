@@ -2,110 +2,29 @@
 
 from mcp.types import Tool
 
-READ_URL_TOOL = Tool(
-    name="read_url",
-    description="""Fetch and read content from a URL, returning clean markdown.
+READ_RESOURCE_TOOL = Tool(
+    name="read_resource",
+    description="""Read a URL or file and convert to markdown.
 
-Use this to read:
-- Articles, blog posts, news, documentation
-- Online PDFs and Google Docs (public)
-- Dynamic web apps (set render_js: true)
+Provide ONE of:
+- url: Webpage, online PDF, or Google Doc
+- file_content + filename: Base64-encoded file
 
-Returns structured JSON with:
-- title: Page title
-- content: Markdown text
-- word_count: Content length
-- metadata: Author, date, description
+Supported formats: PDF, DOCX, XLSX, PPTX, HTML, images (OCR), and more.
 
-For JavaScript-heavy pages (SPAs, dashboards), enable render_js.
-This adds ~15-30 seconds but captures dynamically loaded content.""",
+For JavaScript-heavy pages (SPAs, dashboards), set render_js: true.
+This adds ~15-30 seconds but captures dynamically loaded content.
+
+Returns markdown by default, or structured JSON with metadata (set output_format: "json").""",
     inputSchema={
         "type": "object",
-        "required": ["url"],
         "properties": {
             "url": {
                 "type": "string",
                 "format": "uri",
                 "description": "URL to fetch (webpage, PDF link, document URL)",
             },
-            "render_js": {
-                "type": "boolean",
-                "default": False,
-                "description": (
-                    "Execute JavaScript before reading. "
-                    "Enable for SPAs and pages that load content dynamically. "
-                    "Slower but more complete."
-                ),
-            },
-            "max_length": {
-                "type": "integer",
-                "description": "Maximum characters to return. Content is truncated if exceeded.",
-            },
-            "max_tokens": {
-                "type": "integer",
-                "description": "Maximum tokens to return (uses tiktoken cl100k_base encoding).",
-            },
-            "truncate_mode": {
-                "type": "string",
-                "enum": ["chars", "tokens", "sections", "paragraphs"],
-                "description": (
-                    "Truncation mode: chars (character limit), tokens (token limit), "
-                    "sections (first N ## headings), paragraphs (first N paragraphs)."
-                ),
-            },
-            "truncate_limit": {
-                "type": "integer",
-                "description": (
-                    "Limit for truncation mode (character count, token count, "
-                    "section count, or paragraph count)."
-                ),
-            },
-            "timeout": {
-                "type": "integer",
-                "description": "Timeout in seconds for the conversion operation.",
-            },
-            "include_frontmatter": {
-                "type": "boolean",
-                "default": True,
-                "description": "Include YAML frontmatter with metadata (title, description, etc.)",
-            },
-            "output_format": {
-                "type": "string",
-                "enum": ["markdown", "json"],
-                "default": "markdown",
-                "description": (
-                    "Output format: markdown (default) returns raw markdown, "
-                    "json returns structured response with metadata."
-                ),
-            },
-        },
-    },
-)
-
-READ_FILE_TOOL = Tool(
-    name="read_file",
-    description="""Read and extract content from a document file, returning clean markdown.
-
-Supported formats:
-- Documents: PDF, DOCX, DOC, RTF, ODT
-- Spreadsheets: XLSX, XLS, CSV
-- Presentations: PPTX, PPT, ODP
-- Images: PNG, JPG, GIF, WebP, TIFF (auto-OCR)
-- Web: HTML, XML
-- Text: TXT, MD, JSON
-
-Images automatically use OCR to extract visible text - no extra parameters needed.
-
-Returns structured JSON with:
-- title: Document title or filename
-- content: Extracted markdown
-- word_count: Content length
-- metadata: Author, dates, page count""",
-    inputSchema={
-        "type": "object",
-        "required": ["content", "filename"],
-        "properties": {
-            "content": {
+            "file_content": {
                 "type": "string",
                 "description": "Base64-encoded file data",
             },
@@ -113,7 +32,15 @@ Returns structured JSON with:
                 "type": "string",
                 "description": (
                     "Filename with extension (e.g., 'report.pdf', 'chart.png'). "
-                    "Used to determine processing method."
+                    "Required with file_content."
+                ),
+            },
+            "render_js": {
+                "type": "boolean",
+                "default": False,
+                "description": (
+                    "Execute JavaScript before reading (URLs only). "
+                    "Enable for SPAs and pages that load content dynamically."
                 ),
             },
             "max_length": {
@@ -162,4 +89,4 @@ Returns structured JSON with:
 )
 
 # Export list of all tools
-TOOLS = [READ_URL_TOOL, READ_FILE_TOOL]
+TOOLS = [READ_RESOURCE_TOOL]

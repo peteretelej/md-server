@@ -11,20 +11,19 @@ class TestMCPServerIntegration:
     """Integration tests for MCP server tool calls."""
 
     @pytest.mark.asyncio
-    async def test_list_tools_returns_both(self):
-        """list_tools should return both read_url and read_file."""
+    async def test_list_tools_returns_read_resource(self):
+        """list_tools should return read_resource tool."""
         from md_server.mcp.server import list_tools
 
         tools = await list_tools()
         names = [t.name for t in tools]
 
-        assert "read_url" in names
-        assert "read_file" in names
-        assert len(tools) == 2
+        assert "read_resource" in names
+        assert len(tools) == 1
 
     @pytest.mark.asyncio
-    async def test_call_read_url_success(self):
-        """call_tool should handle read_url successfully with JSON format."""
+    async def test_call_read_resource_url_success(self):
+        """call_tool should handle read_resource with url successfully."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
@@ -47,7 +46,7 @@ class TestMCPServerIntegration:
             mock_get.return_value = mock_conv
 
             result = await call_tool(
-                "read_url",
+                "read_resource",
                 {"url": "https://example.com", "output_format": "json"},
             )
 
@@ -57,7 +56,7 @@ class TestMCPServerIntegration:
             assert data["title"] == "Test Page"
 
     @pytest.mark.asyncio
-    async def test_call_read_url_with_render_js(self):
+    async def test_call_read_resource_with_render_js(self):
         """call_tool should pass render_js to handler."""
         from md_server.mcp.server import call_tool
 
@@ -73,15 +72,15 @@ class TestMCPServerIntegration:
             mock_get.return_value = mock_conv
 
             await call_tool(
-                "read_url", {"url": "https://example.com", "render_js": True}
+                "read_resource", {"url": "https://example.com", "render_js": True}
             )
 
             call_kwargs = mock_conv.convert_url.call_args.kwargs
             assert call_kwargs["js_rendering"] is True
 
     @pytest.mark.asyncio
-    async def test_call_read_file_success(self):
-        """call_tool should handle read_file successfully with JSON format."""
+    async def test_call_read_resource_file_success(self):
+        """call_tool should handle read_resource with file_content successfully."""
         from md_server.mcp.server import call_tool
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
@@ -107,9 +106,9 @@ class TestMCPServerIntegration:
 
             content_b64 = base64.b64encode(b"fake pdf data").decode()
             result = await call_tool(
-                "read_file",
+                "read_resource",
                 {
-                    "content": content_b64,
+                    "file_content": content_b64,
                     "filename": "test.pdf",
                     "output_format": "json",
                 },
@@ -123,26 +122,33 @@ class TestMCPServerIntegration:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "tool_name,args",
+        "args,test_id",
         [
-            ("read_url", {}),  # missing URL
-            ("read_file", {"filename": "test.pdf"}),  # missing content
+            ({}, "missing_both"),  # neither url nor file_content
             (
-                "read_file",
-                {"content": base64.b64encode(b"data").decode()},
+                {"file_content": base64.b64encode(b"data").decode()},
+                "missing_filename",
             ),  # missing filename
             (
-                "read_file",
-                {"content": "not-valid-base64!!!", "filename": "test.pdf"},
+                {
+                    "url": "https://example.com",
+                    "file_content": base64.b64encode(b"data").decode(),
+                    "filename": "test.pdf",
+                },
+                "both_url_and_file",
+            ),  # both url and file_content
+            (
+                {"file_content": "not-valid-base64!!!", "filename": "test.pdf"},
+                "invalid_base64",
             ),  # invalid base64
         ],
-        ids=["missing_url", "missing_content", "missing_filename", "invalid_base64"],
+        ids=["missing_both", "missing_filename", "both_url_and_file", "invalid_base64"],
     )
-    async def test_invalid_input_returns_error(self, tool_name, args):
+    async def test_invalid_input_returns_error(self, args, test_id):
         """call_tool should return error for invalid inputs."""
         from md_server.mcp.server import call_tool
 
-        result = await call_tool(tool_name, args)
+        result = await call_tool("read_resource", args)
 
         data = json.loads(result[0].text)
         assert data["success"] is False
@@ -158,8 +164,7 @@ class TestMCPServerIntegration:
         data = json.loads(result[0].text)
         assert data["success"] is False
         assert data["error"]["code"] == "UNKNOWN_TOOL"
-        assert "read_url" in str(data["error"]["suggestions"])
-        assert "read_file" in str(data["error"]["suggestions"])
+        assert "read_resource" in str(data["error"]["suggestions"])
 
     @pytest.mark.asyncio
     async def test_response_is_json_string(self):
@@ -204,7 +209,7 @@ class TestMCPResponseFormat:
             mock_get.return_value = mock_conv
 
             result = await call_tool(
-                "read_url",
+                "read_resource",
                 {"url": "https://example.com", "output_format": "json"},
             )
 

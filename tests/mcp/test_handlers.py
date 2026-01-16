@@ -3,8 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from md_server.mcp.handlers import (
-    handle_read_url,
-    handle_read_file,
+    handle_read_resource,
     _extract_title_from_url,
 )
 from md_server.mcp.models import MCPSuccessResponse, MCPErrorResponse
@@ -47,8 +46,72 @@ def mock_conversion_result():
 
 
 @pytest.mark.unit
-class TestHandleReadUrl:
-    """Tests for handle_read_url handler."""
+class TestHandleReadResourceInputValidation:
+    """Tests for handle_read_resource input validation."""
+
+    @pytest.mark.asyncio
+    async def test_error_when_both_url_and_file_content(self, mock_converter):
+        """Should return error when both url and file_content are provided."""
+        result = await handle_read_resource(
+            mock_converter,
+            url="https://example.com",
+            file_content=b"fake content",
+            filename="test.pdf",
+        )
+
+        assert isinstance(result, MCPErrorResponse)
+        assert result.error.code == ErrorCode.INVALID_INPUT
+        assert "not both" in result.error.message
+
+    @pytest.mark.asyncio
+    async def test_error_when_neither_url_nor_file_content(self, mock_converter):
+        """Should return error when neither url nor file_content is provided."""
+        result = await handle_read_resource(mock_converter)
+
+        assert isinstance(result, MCPErrorResponse)
+        assert result.error.code == ErrorCode.INVALID_INPUT
+        assert (
+            "url" in result.error.message.lower()
+            or "file_content" in result.error.message.lower()
+        )
+
+    @pytest.mark.asyncio
+    async def test_error_when_file_content_without_filename(self, mock_converter):
+        """Should return error when file_content is provided without filename."""
+        result = await handle_read_resource(
+            mock_converter,
+            file_content=b"fake content",
+        )
+
+        assert isinstance(result, MCPErrorResponse)
+        assert result.error.code == ErrorCode.INVALID_INPUT
+        assert "filename" in result.error.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_render_js_silently_ignored_for_file(
+        self, mock_converter, mock_conversion_result
+    ):
+        """render_js should be silently ignored when processing a file."""
+        mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
+
+        # Should not raise error or return error response
+        result = await handle_read_resource(
+            mock_converter,
+            file_content=b"fake content",
+            filename="test.pdf",
+            render_js=True,  # This should be silently ignored
+        )
+
+        # Should succeed, not error
+        assert not isinstance(result, MCPErrorResponse)
+        # convert_content should NOT have js_rendering in its kwargs
+        call_kwargs = mock_converter.convert_content.call_args.kwargs
+        assert "js_rendering" not in call_kwargs
+
+
+@pytest.mark.unit
+class TestHandleReadResourceUrl:
+    """Tests for handle_read_resource with URL input."""
 
     # --- Output Format Tests (table-driven) ---
 
@@ -77,7 +140,9 @@ class TestHandleReadUrl:
         if output_format is not None:
             kwargs["output_format"] = output_format
 
-        result = await handle_read_url(mock_converter, "https://example.com", **kwargs)
+        result = await handle_read_resource(
+            mock_converter, url="https://example.com", **kwargs
+        )
 
         assert isinstance(result, expected_type)
         if check_field:
@@ -86,9 +151,9 @@ class TestHandleReadUrl:
     @pytest.mark.asyncio
     async def test_error_always_json(self, mock_converter):
         """Error responses should always be JSON regardless of output_format."""
-        result = await handle_read_url(
+        result = await handle_read_resource(
             mock_converter,
-            "invalid-url",
+            url="invalid-url",
             render_js=False,
             output_format="markdown",
         )
@@ -109,7 +174,7 @@ class TestHandleReadUrl:
     )
     async def test_invalid_url_rejected(self, mock_converter, url):
         """Should return error for invalid URLs."""
-        result = await handle_read_url(mock_converter, url, render_js=False)
+        result = await handle_read_resource(mock_converter, url=url, render_js=False)
 
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == ErrorCode.INVALID_URL
@@ -155,7 +220,7 @@ class TestHandleReadUrl:
         mock_converter.convert_url = AsyncMock(side_effect=exception)
         mock_converter.timeout = 30
 
-        result = await handle_read_url(mock_converter, "https://example.com")
+        result = await handle_read_resource(mock_converter, url="https://example.com")
 
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == expected_code
@@ -170,8 +235,8 @@ class TestHandleReadUrl:
         mock_result.metadata.detected_language = None
         mock_converter.convert_url = AsyncMock(return_value=mock_result)
 
-        result = await handle_read_url(
-            mock_converter, "https://spa.com", render_js=False
+        result = await handle_read_resource(
+            mock_converter, url="https://spa.com", render_js=False
         )
 
         assert isinstance(result, MCPErrorResponse)
@@ -203,7 +268,7 @@ class TestHandleReadUrl:
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
         kwargs = {param_name: param_value}
-        await handle_read_url(mock_converter, "https://example.com", **kwargs)
+        await handle_read_resource(mock_converter, url="https://example.com", **kwargs)
 
         mock_converter.convert_url.assert_called_once()
         call_kwargs = mock_converter.convert_url.call_args.kwargs
@@ -221,7 +286,7 @@ class TestHandleReadUrl:
         """Should not pass optional parameters when None."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_url(mock_converter, "https://example.com")
+        await handle_read_resource(mock_converter, url="https://example.com")
 
         mock_converter.convert_url.assert_called_once()
         call_kwargs = mock_converter.convert_url.call_args.kwargs
@@ -234,7 +299,9 @@ class TestHandleReadUrl:
         """Should pass render_js to converter."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_url(mock_converter, "https://example.com", render_js=True)
+        await handle_read_resource(
+            mock_converter, url="https://example.com", render_js=True
+        )
 
         mock_converter.convert_url.assert_called_once()
         call_kwargs = mock_converter.convert_url.call_args.kwargs
@@ -252,9 +319,9 @@ class TestHandleReadUrl:
         """Should pass include_frontmatter to converter."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_url(
+        await handle_read_resource(
             mock_converter,
-            "https://example.com",
+            url="https://example.com",
             include_frontmatter=include_frontmatter,
         )
 
@@ -269,7 +336,7 @@ class TestHandleReadUrl:
         """Should default include_frontmatter to True."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_url(mock_converter, "https://example.com")
+        await handle_read_resource(mock_converter, url="https://example.com")
 
         mock_converter.convert_url.assert_called_once()
         call_kwargs = mock_converter.convert_url.call_args.kwargs
@@ -280,8 +347,8 @@ class TestHandleReadUrl:
         """Should calculate word count from content (JSON format)."""
         mock_converter.convert_url = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_url(
-            mock_converter, "https://example.com", output_format="json"
+        result = await handle_read_resource(
+            mock_converter, url="https://example.com", output_format="json"
         )
 
         assert isinstance(result, MCPSuccessResponse)
@@ -289,8 +356,8 @@ class TestHandleReadUrl:
 
 
 @pytest.mark.unit
-class TestHandleReadFile:
-    """Tests for handle_read_file handler."""
+class TestHandleReadResourceFile:
+    """Tests for handle_read_resource with file input."""
 
     # --- Output Format Tests (table-driven) ---
 
@@ -314,8 +381,8 @@ class TestHandleReadFile:
         if output_format is not None:
             kwargs["output_format"] = output_format
 
-        result = await handle_read_file(
-            mock_converter, b"fake content", "file.pdf", **kwargs
+        result = await handle_read_resource(
+            mock_converter, file_content=b"fake content", filename="file.pdf", **kwargs
         )
 
         assert isinstance(result, expected_type)
@@ -326,10 +393,10 @@ class TestHandleReadFile:
         mock_converter.max_file_size_mb = 1
         large_content = b"x" * (2 * 1024 * 1024)  # 2MB
 
-        result = await handle_read_file(
+        result = await handle_read_resource(
             mock_converter,
-            large_content,
-            "large.pdf",
+            file_content=large_content,
+            filename="large.pdf",
             output_format="markdown",
         )
 
@@ -355,7 +422,9 @@ class TestHandleReadFile:
         """Should enable OCR for image files, not for others."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(mock_converter, b"fake content", filename)
+        await handle_read_resource(
+            mock_converter, file_content=b"fake content", filename=filename
+        )
 
         call_kwargs = mock_converter.convert_content.call_args.kwargs
         if should_ocr:
@@ -389,7 +458,9 @@ class TestHandleReadFile:
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
         kwargs = {param_name: param_value}
-        await handle_read_file(mock_converter, b"fake content", "doc.pdf", **kwargs)
+        await handle_read_resource(
+            mock_converter, file_content=b"fake content", filename="doc.pdf", **kwargs
+        )
 
         mock_converter.convert_content.assert_called_once()
         call_kwargs = mock_converter.convert_content.call_args.kwargs
@@ -407,7 +478,9 @@ class TestHandleReadFile:
         """Should not pass optional parameters when None."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(mock_converter, b"fake content", "doc.pdf")
+        await handle_read_resource(
+            mock_converter, file_content=b"fake content", filename="doc.pdf"
+        )
 
         mock_converter.convert_content.assert_called_once()
         call_kwargs = mock_converter.convert_content.call_args.kwargs
@@ -425,10 +498,10 @@ class TestHandleReadFile:
         """Should pass include_frontmatter to converter."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(
+        await handle_read_resource(
             mock_converter,
-            b"fake content",
-            "doc.pdf",
+            file_content=b"fake content",
+            filename="doc.pdf",
             include_frontmatter=include_frontmatter,
         )
 
@@ -443,7 +516,9 @@ class TestHandleReadFile:
         """Should default include_frontmatter to True."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        await handle_read_file(mock_converter, b"fake content", "doc.pdf")
+        await handle_read_resource(
+            mock_converter, file_content=b"fake content", filename="doc.pdf"
+        )
 
         mock_converter.convert_content.assert_called_once()
         call_kwargs = mock_converter.convert_content.call_args.kwargs
@@ -473,7 +548,9 @@ class TestHandleReadFile:
         """Should return correct error code for various exceptions."""
         mock_converter.convert_content = AsyncMock(side_effect=exception)
 
-        result = await handle_read_file(mock_converter, b"data", "file.pdf")
+        result = await handle_read_resource(
+            mock_converter, file_content=b"data", filename="file.pdf"
+        )
 
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == expected_code
@@ -484,7 +561,9 @@ class TestHandleReadFile:
         mock_converter.max_file_size_mb = 1
         large_content = b"x" * (2 * 1024 * 1024)  # 2MB
 
-        result = await handle_read_file(mock_converter, large_content, "large.pdf")
+        result = await handle_read_resource(
+            mock_converter, file_content=large_content, filename="large.pdf"
+        )
 
         assert isinstance(result, MCPErrorResponse)
         assert result.error.code == ErrorCode.FILE_TOO_LARGE
@@ -498,8 +577,11 @@ class TestHandleReadFile:
         """Should set ocr_applied in metadata for images (JSON format)."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_file(
-            mock_converter, b"image", "photo.png", output_format="json"
+        result = await handle_read_resource(
+            mock_converter,
+            file_content=b"image",
+            filename="photo.png",
+            output_format="json",
         )
 
         assert isinstance(result, MCPSuccessResponse)
@@ -510,8 +592,11 @@ class TestHandleReadFile:
         """Should use filename as source (JSON format)."""
         mock_converter.convert_content = AsyncMock(return_value=mock_conversion_result)
 
-        result = await handle_read_file(
-            mock_converter, b"data", "myfile.pdf", output_format="json"
+        result = await handle_read_resource(
+            mock_converter,
+            file_content=b"data",
+            filename="myfile.pdf",
+            output_format="json",
         )
 
         assert isinstance(result, MCPSuccessResponse)
@@ -519,8 +604,8 @@ class TestHandleReadFile:
 
 
 @pytest.mark.unit
-class TestHandleReadUrlSsrf:
-    """Tests for SSRF handling in handle_read_url."""
+class TestHandleReadResourceSsrf:
+    """Tests for SSRF handling in handle_read_resource."""
 
     @pytest.fixture
     def mock_converter(self):
@@ -545,8 +630,8 @@ class TestHandleReadUrlSsrf:
         """Should return correct error code for SSRF-related ValueErrors."""
         mock_converter.convert_url = AsyncMock(side_effect=ValueError(error_message))
 
-        result = await handle_read_url(
-            mock_converter, "https://example.com", render_js=False
+        result = await handle_read_resource(
+            mock_converter, url="https://example.com", render_js=False
         )
 
         assert isinstance(result, MCPErrorResponse)

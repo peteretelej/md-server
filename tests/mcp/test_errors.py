@@ -188,8 +188,7 @@ class TestUnknownToolError:
         """Suggestions should list available tools."""
         result = unknown_tool_error("bad_tool")
         suggestions_text = " ".join(result.error.suggestions)
-        assert "read_url" in suggestions_text
-        assert "read_file" in suggestions_text
+        assert "read_resource" in suggestions_text
 
 
 class TestConversionError:

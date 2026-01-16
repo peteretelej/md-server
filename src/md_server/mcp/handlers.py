@@ -16,6 +16,7 @@ from .errors import (
     conversion_error,
     unsupported_format_error,
     file_too_large_error,
+    invalid_input_error,
 )
 from ..core.converter import DocumentConverter
 from ..core.errors import (
@@ -35,9 +36,11 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".tiff", ".bmp"}
 MIN_WORD_COUNT = 5
 
 
-async def handle_read_url(
+async def handle_read_resource(
     converter: DocumentConverter,
-    url: str,
+    url: Optional[str] = None,
+    file_content: Optional[bytes] = None,
+    filename: Optional[str] = None,
     render_js: bool = False,
     max_length: Optional[int] = None,
     max_tokens: Optional[int] = None,
@@ -48,12 +51,14 @@ async def handle_read_url(
     output_format: str = "markdown",
 ) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
     """
-    Handle read_url tool call.
+    Handle read_resource tool call - unified handler for URLs and files.
 
     Args:
         converter: DocumentConverter instance
-        url: URL to fetch and convert
-        render_js: Whether to render JavaScript before extraction
+        url: URL to fetch and convert (mutually exclusive with file_content)
+        file_content: File content as bytes (mutually exclusive with url)
+        filename: Original filename with extension (required with file_content)
+        render_js: Whether to render JavaScript before extraction (URLs only)
         max_length: Maximum characters to return (truncates if exceeded)
         max_tokens: Maximum tokens to return (uses tiktoken cl100k_base encoding)
         truncate_mode: Truncation mode (chars, tokens, sections, paragraphs)
@@ -67,28 +72,79 @@ async def handle_read_url(
         MCPSuccessResponse when output_format="json",
         MCPErrorResponse on failure (always JSON)
     """
+    # Validate mutually exclusive inputs
+    has_url = url is not None
+    has_file = file_content is not None
+
+    if has_url and has_file:
+        return invalid_input_error("Provide 'url' or 'file_content', not both")
+    if not has_url and not has_file:
+        return invalid_input_error("Provide 'url' or 'file_content'")
+    if has_file and not filename:
+        return invalid_input_error("'filename' required with 'file_content'")
+
+    # Build common options
+    options = _build_options(
+        max_length=max_length,
+        max_tokens=max_tokens,
+        truncate_mode=truncate_mode,
+        truncate_limit=truncate_limit,
+        timeout=timeout,
+        include_frontmatter=include_frontmatter,
+    )
+
+    # Dispatch to appropriate handler
+    # Note: render_js is silently ignored for file_content (no error, no warning)
+    if has_url:
+        return await _handle_url(converter, url, render_js, options, output_format)
+    else:
+        return await _handle_file(
+            converter, file_content, filename, options, output_format
+        )
+
+
+def _build_options(
+    max_length: Optional[int] = None,
+    max_tokens: Optional[int] = None,
+    truncate_mode: Optional[str] = None,
+    truncate_limit: Optional[int] = None,
+    timeout: Optional[int] = None,
+    include_frontmatter: bool = True,
+) -> dict:
+    """Build options dict for converter, only including non-None values."""
+    options: dict = {
+        "include_frontmatter": include_frontmatter,
+    }
+    if max_length is not None:
+        options["max_length"] = max_length
+    if max_tokens is not None:
+        options["max_tokens"] = max_tokens
+    if truncate_mode is not None:
+        options["truncate_mode"] = truncate_mode
+    if truncate_limit is not None:
+        options["truncate_limit"] = truncate_limit
+    if timeout is not None:
+        options["timeout"] = timeout
+    return options
+
+
+async def _handle_url(
+    converter: DocumentConverter,
+    url: str,
+    render_js: bool,
+    options: dict,
+    output_format: str,
+) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
+    """Handle URL conversion."""
     # Validate URL format
     if not url.startswith(("http://", "https://")):
         return invalid_url_error(url)
 
     try:
-        # Build options dict, only include timeout if explicitly set
-        options: dict = {
-            "js_rendering": render_js,
-            "include_frontmatter": include_frontmatter,
-        }
-        if max_length is not None:
-            options["max_length"] = max_length
-        if max_tokens is not None:
-            options["max_tokens"] = max_tokens
-        if truncate_mode is not None:
-            options["truncate_mode"] = truncate_mode
-        if truncate_limit is not None:
-            options["truncate_limit"] = truncate_limit
-        if timeout is not None:
-            options["timeout"] = timeout
+        # Add URL-specific options
+        url_options = {**options, "js_rendering": render_js}
 
-        result = await converter.convert_url(url, **options)
+        result = await converter.convert_url(url, **url_options)
 
         word_count = len(result.markdown.split())
 
@@ -144,38 +200,14 @@ async def handle_read_url(
         return conversion_error(str(e))
 
 
-async def handle_read_file(
+async def _handle_file(
     converter: DocumentConverter,
     content: bytes,
     filename: str,
-    max_length: Optional[int] = None,
-    max_tokens: Optional[int] = None,
-    truncate_mode: Optional[str] = None,
-    truncate_limit: Optional[int] = None,
-    timeout: Optional[int] = None,
-    include_frontmatter: bool = True,
-    output_format: str = "markdown",
+    options: dict,
+    output_format: str,
 ) -> Union[str, MCPSuccessResponse, MCPErrorResponse]:
-    """
-    Handle read_file tool call.
-
-    Args:
-        converter: DocumentConverter instance
-        content: File content as bytes
-        filename: Original filename with extension
-        max_length: Maximum characters to return (truncates if exceeded)
-        max_tokens: Maximum tokens to return (uses tiktoken cl100k_base encoding)
-        truncate_mode: Truncation mode (chars, tokens, sections, paragraphs)
-        truncate_limit: Limit for truncation mode
-        timeout: Timeout in seconds for conversion (uses converter default if None)
-        include_frontmatter: Include YAML frontmatter with metadata
-        output_format: Output format - "markdown" (default) or "json"
-
-    Returns:
-        Raw markdown string when output_format="markdown",
-        MCPSuccessResponse when output_format="json",
-        MCPErrorResponse on failure (always JSON)
-    """
+    """Handle file conversion."""
     ext = os.path.splitext(filename)[1].lower()
     is_image = ext in IMAGE_EXTENSIONS
 
@@ -185,23 +217,12 @@ async def handle_read_file(
         return file_too_large_error(size_mb, converter.max_file_size_mb)
 
     try:
-        # Build options dict
-        options: dict = {
-            "include_frontmatter": include_frontmatter,
-            "ocr_enabled": is_image,  # Auto-enable OCR for images
-        }
-        if max_length is not None:
-            options["max_length"] = max_length
-        if max_tokens is not None:
-            options["max_tokens"] = max_tokens
-        if truncate_mode is not None:
-            options["truncate_mode"] = truncate_mode
-        if truncate_limit is not None:
-            options["truncate_limit"] = truncate_limit
-        if timeout is not None:
-            options["timeout"] = timeout
+        # Add file-specific options
+        file_options = {**options, "ocr_enabled": is_image}
 
-        result = await converter.convert_content(content, filename=filename, **options)
+        result = await converter.convert_content(
+            content, filename=filename, **file_options
+        )
 
         # Return raw markdown by default
         if output_format == "markdown":
