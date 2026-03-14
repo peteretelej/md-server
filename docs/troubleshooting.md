@@ -182,17 +182,6 @@ If fetching HTTPS URLs fails due to certificate issues, ensure your system's CA 
 
 4. **Check for errors** - Look at Claude Desktop logs for error messages
 
-### SSE connection failing
-
-1. Verify the server is running:
-   ```bash
-   curl http://localhost:9000/health
-   ```
-
-2. Check firewall settings
-
-3. Ensure no other service is using the port
-
 ### MCP conversion errors
 
 Check that the server can access the target URL or file. Environment variables still apply in MCP mode.

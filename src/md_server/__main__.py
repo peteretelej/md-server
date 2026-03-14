@@ -41,13 +41,6 @@ def main():
         dest="mode",
         help="Run as MCP server (stdio transport)",
     )
-    mode_group.add_argument(
-        "--mcp-sse",
-        action="store_const",
-        const="mcp-sse",
-        dest="mode",
-        help="Run as MCP server (SSE transport)",
-    )
 
     parser.set_defaults(mode="http")
 
@@ -63,17 +56,6 @@ def main():
             )
             sys.exit(1)
         run_stdio()
-
-    elif args.mode == "mcp-sse":
-        try:
-            from .mcp.server import run_sse
-        except ImportError:
-            print(
-                "MCP dependencies not installed. Install with: pip install md-server[mcp]",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        run_sse(host=args.host, port=args.port)
 
     else:
         if not is_port_available(args.host, args.port):

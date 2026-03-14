@@ -5,53 +5,64 @@ import json
 import pytest
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
 
-from md_server.mcp.server import call_tool, list_tools, get_converter
+from md_server.mcp.server import convert_to_markdown, get_converter, mcp
+
+
+def _get_tool():
+    """Get the convert_to_markdown tool from FastMCP."""
+    tools = mcp._tool_manager.list_tools()
+    return next(t for t in tools if t.name == "convert_to_markdown")
 
 
 @pytest.mark.unit
 class TestMCPServer:
     """Test MCP server functionality."""
 
-    @pytest.mark.asyncio
-    async def test_list_tools_returns_one(self):
-        """list_tools should return read_resource tool."""
-        tools = await list_tools()
-        assert len(tools) == 1
-        assert tools[0].name == "read_resource"
+    def test_tool_is_registered(self):
+        """convert_to_markdown should be registered as a tool."""
+        tools = mcp._tool_manager.list_tools()
+        names = [t.name for t in tools]
+        assert "convert_to_markdown" in names
 
-    @pytest.mark.asyncio
-    async def test_list_tools_has_output_format(self):
-        """Tool should have output_format parameter."""
-        tools = await list_tools()
-        tool = tools[0]
-        props = tool.inputSchema.get("properties", {})
+    def test_tool_has_no_output_schema(self):
+        """Tool should not have an output schema (avoids Claude Code bug)."""
+        tool = _get_tool()
+        assert tool.output_schema is None
+
+    def test_tool_has_readonly_annotation(self):
+        """Tool should have readOnlyHint annotation."""
+        tool = _get_tool()
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is True
+
+    def test_tool_has_expected_parameters(self):
+        """Tool should have all expected input parameters."""
+        tool = _get_tool()
+        props = tool.parameters.get("properties", {})
+        expected = [
+            "url",
+            "file_content",
+            "filename",
+            "render_js",
+            "max_length",
+            "max_tokens",
+            "truncate_mode",
+            "truncate_limit",
+            "timeout",
+            "include_frontmatter",
+            "output_format",
+        ]
+        for param in expected:
+            assert param in props, f"missing parameter: {param}"
+
+    def test_tool_has_output_format_default(self):
+        """Tool should have output_format with default 'markdown'."""
+        tool = _get_tool()
+        props = tool.parameters.get("properties", {})
         assert "output_format" in props
         assert props["output_format"]["default"] == "markdown"
-        assert props["output_format"]["enum"] == ["markdown", "json"]
 
-    @pytest.mark.asyncio
-    async def test_list_tools_has_new_options(self):
-        """Tool should have max_length, timeout, include_frontmatter parameters."""
-        tools = await list_tools()
-        tool = tools[0]
-        props = tool.inputSchema.get("properties", {})
-        assert "max_length" in props, "missing max_length"
-        assert "timeout" in props, "missing timeout"
-        assert "include_frontmatter" in props, "missing include_frontmatter"
-        assert props["include_frontmatter"]["default"] is True
-
-    @pytest.mark.asyncio
-    async def test_list_tools_has_unified_inputs(self):
-        """Tool should have both url and file_content inputs."""
-        tools = await list_tools()
-        tool = tools[0]
-        props = tool.inputSchema.get("properties", {})
-        assert "url" in props
-        assert "file_content" in props
-        assert "filename" in props
-        assert "render_js" in props
-
-    # --- Output Format Tests (consolidated) ---
+    # --- Output Format Tests ---
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -63,8 +74,8 @@ class TestMCPServer:
         ],
         ids=["default_markdown", "explicit_markdown", "json"],
     )
-    async def test_read_resource_url_output_format(self, output_format, is_json):
-        """read_resource with url should return correct format based on output_format."""
+    async def test_url_output_format(self, output_format, is_json):
+        """convert_to_markdown with url should return correct format."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
@@ -84,32 +95,31 @@ class TestMCPServer:
             )
             mock_get.return_value = mock_conv
 
-            args = {"url": "https://example.com"}
+            kwargs = {"url": "https://example.com"}
             if output_format is not None:
-                args["output_format"] = output_format
+                kwargs["output_format"] = output_format
 
-            result = await call_tool("read_resource", args)
+            result = await convert_to_markdown(**kwargs)
 
-            assert len(result) == 1
-            assert result[0].type == "text"
+            assert isinstance(result, str)
             if is_json:
-                data = json.loads(result[0].text)
+                data = json.loads(result)
                 assert data["success"] is True
             else:
-                assert result[0].text.startswith("# Hello World")
+                assert result.startswith("# Hello World")
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "output_format,is_json",
         [
-            (None, False),  # default is markdown
+            (None, False),
             ("markdown", False),
             ("json", True),
         ],
         ids=["default_markdown", "explicit_markdown", "json"],
     )
-    async def test_read_resource_file_output_format(self, output_format, is_json):
-        """read_resource with file_content should return correct format based on output_format."""
+    async def test_file_output_format(self, output_format, is_json):
+        """convert_to_markdown with file_content should return correct format."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_metadata = MagicMock()
             mock_metadata.title = "Doc"
@@ -132,24 +142,24 @@ class TestMCPServer:
             mock_get.return_value = mock_conv
 
             content = base64.b64encode(b"fake pdf content").decode()
-            args = {"file_content": content, "filename": "test.pdf"}
+            kwargs = {"file_content": content, "filename": "test.pdf"}
             if output_format is not None:
-                args["output_format"] = output_format
+                kwargs["output_format"] = output_format
 
-            result = await call_tool("read_resource", args)
+            result = await convert_to_markdown(**kwargs)
 
-            assert len(result) == 1
+            assert isinstance(result, str)
             if is_json:
-                data = json.loads(result[0].text)
+                data = json.loads(result)
                 assert data["success"] is True
             else:
-                assert result[0].text.startswith("# Markdown Content")
+                assert result.startswith("# Markdown Content")
 
     # --- Parameter Passing Tests ---
 
     @pytest.mark.asyncio
-    async def test_read_resource_url_passes_new_options(self):
-        """read_resource with url should pass max_length, timeout, include_frontmatter to handler."""
+    async def test_url_passes_new_options(self):
+        """convert_to_markdown with url should pass options to handler."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
             mock_conv.timeout = 60
@@ -161,14 +171,11 @@ class TestMCPServer:
             )
             mock_get.return_value = mock_conv
 
-            await call_tool(
-                "read_resource",
-                {
-                    "url": "https://example.com",
-                    "max_length": 100,
-                    "timeout": 30,
-                    "include_frontmatter": False,
-                },
+            await convert_to_markdown(
+                url="https://example.com",
+                max_length=100,
+                timeout=30,
+                include_frontmatter=False,
             )
 
             mock_conv.convert_url.assert_called_once()
@@ -178,8 +185,8 @@ class TestMCPServer:
             assert call_kwargs["include_frontmatter"] is False
 
     @pytest.mark.asyncio
-    async def test_read_resource_file_passes_new_options(self):
-        """read_resource with file_content should pass max_length, timeout, include_frontmatter to handler."""
+    async def test_file_passes_new_options(self):
+        """convert_to_markdown with file_content should pass options to handler."""
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_metadata = MagicMock()
             mock_metadata.title = "Doc"
@@ -198,15 +205,12 @@ class TestMCPServer:
             mock_get.return_value = mock_conv
 
             content = base64.b64encode(b"fake pdf content").decode()
-            await call_tool(
-                "read_resource",
-                {
-                    "file_content": content,
-                    "filename": "test.pdf",
-                    "max_length": 200,
-                    "timeout": 45,
-                    "include_frontmatter": False,
-                },
+            await convert_to_markdown(
+                file_content=content,
+                filename="test.pdf",
+                max_length=200,
+                timeout=45,
+                include_frontmatter=False,
             )
 
             mock_conv.convert_content.assert_called_once()
@@ -215,109 +219,52 @@ class TestMCPServer:
             assert call_kwargs["timeout"] == 45
             assert call_kwargs["include_frontmatter"] is False
 
-    # --- Error Handling Tests (consolidated) ---
+    # --- Error Handling Tests ---
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "tool_name,args,expected_code",
-        [
-            # Neither url nor file_content
-            ("read_resource", {}, "INVALID_INPUT"),
-            ("read_resource", {"output_format": "markdown"}, "INVALID_INPUT"),
-            # file_content without filename
-            (
-                "read_resource",
-                {"file_content": base64.b64encode(b"data").decode()},
-                "INVALID_INPUT",
-            ),
-            # Both url and file_content
-            (
-                "read_resource",
-                {
-                    "url": "https://example.com",
-                    "file_content": base64.b64encode(b"data").decode(),
-                    "filename": "test.pdf",
-                },
-                "INVALID_INPUT",
-            ),
-            # Invalid base64
-            (
-                "read_resource",
-                {"file_content": "not-valid-base64!!!", "filename": "test.pdf"},
-                "INVALID_INPUT",
-            ),
-            # Unknown tool
-            ("unknown_tool", {}, "UNKNOWN_TOOL"),
-        ],
-        ids=[
-            "missing_both",
-            "missing_both_with_format",
-            "missing_filename",
-            "both_url_and_file",
-            "invalid_base64",
-            "unknown_tool",
-        ],
-    )
-    async def test_error_responses(self, tool_name, args, expected_code):
-        """Should return correct error code for invalid inputs."""
-        result = await call_tool(tool_name, args)
+    async def test_error_missing_input(self):
+        """Should raise ToolError when neither url nor file_content provided."""
+        from mcp.server.fastmcp.exceptions import ToolError
 
-        assert len(result) == 1
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == expected_code
+        with pytest.raises(ToolError):
+            await convert_to_markdown()
 
     @pytest.mark.asyncio
-    async def test_unknown_tool_suggests_alternatives(self):
-        """Unknown tool error should suggest available tools."""
-        result = await call_tool("unknown_tool", {})
+    async def test_error_both_inputs(self):
+        """Should raise ToolError when both url and file_content provided."""
+        from mcp.server.fastmcp.exceptions import ToolError
 
-        data = json.loads(result[0].text)
-        assert "read_resource" in str(data["error"]["suggestions"])
+        content = base64.b64encode(b"data").decode()
+        with pytest.raises(ToolError):
+            await convert_to_markdown(
+                url="https://example.com",
+                file_content=content,
+                filename="test.pdf",
+            )
+
+    @pytest.mark.asyncio
+    async def test_error_missing_filename(self):
+        """Should raise ToolError when file_content without filename."""
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        content = base64.b64encode(b"data").decode()
+        with pytest.raises(ToolError):
+            await convert_to_markdown(file_content=content)
+
+    @pytest.mark.asyncio
+    async def test_error_invalid_base64(self):
+        """Should raise ToolError for invalid base64."""
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        with pytest.raises(ToolError, match="base64"):
+            await convert_to_markdown(
+                file_content="not-valid-base64!!!", filename="test.pdf"
+            )
 
 
 @pytest.mark.unit
 class TestMCPTransports:
-    """Test MCP transport initialization and configuration."""
-
-    def test_run_sse_creates_correct_routes(self):
-        """Verify SSE server has correct route configuration."""
-        import sys
-
-        mock_uvicorn = Mock()
-        with patch.dict(sys.modules, {"uvicorn": mock_uvicorn}):
-            import importlib
-            import md_server.mcp.server as server_module
-
-            importlib.reload(server_module)
-
-            server_module.run_sse(host="127.0.0.1", port=9999)
-
-            mock_uvicorn.run.assert_called_once()
-            app = mock_uvicorn.run.call_args[0][0]
-            route_paths = []
-            for r in app.routes:
-                if hasattr(r, "path"):
-                    route_paths.append(r.path)
-            assert "/health" in route_paths
-            assert "/sse" in route_paths
-
-    def test_run_sse_passes_host_port(self):
-        """Verify host and port are passed to uvicorn."""
-        import sys
-
-        mock_uvicorn = Mock()
-        with patch.dict(sys.modules, {"uvicorn": mock_uvicorn}):
-            import importlib
-            import md_server.mcp.server as server_module
-
-            importlib.reload(server_module)
-
-            server_module.run_sse(host="0.0.0.0", port=8080)
-
-            call_kwargs = mock_uvicorn.run.call_args[1]
-            assert call_kwargs["host"] == "0.0.0.0"
-            assert call_kwargs["port"] == 8080
+    """Test MCP transport and configuration."""
 
     def test_get_converter_uses_settings(self):
         """Verify converter is created with correct settings."""
@@ -329,16 +276,3 @@ class TestMCPTransports:
             converter = get_converter()
             assert converter.timeout == 60
             assert converter.max_file_size_mb == 100
-
-    @pytest.mark.asyncio
-    async def test_sse_health_endpoint_response(self):
-        """Verify health endpoint returns correct response format."""
-        from starlette.responses import JSONResponse
-
-        async def health(request):
-            return JSONResponse({"status": "healthy", "mode": "mcp-sse"})
-
-        response = await health(Mock())
-        assert response.status_code == 200
-        assert b"healthy" in response.body
-        assert b"mcp-sse" in response.body
