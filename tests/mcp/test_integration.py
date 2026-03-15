@@ -12,11 +12,12 @@ from mcp.server.fastmcp.exceptions import ToolError
 class TestMCPServerIntegration:
     """Integration tests for MCP server tool calls."""
 
-    def test_tool_is_registered(self):
+    @pytest.mark.asyncio
+    async def test_tool_is_registered(self):
         """Tool listing should include convert_to_markdown."""
         from md_server.mcp.server import mcp
 
-        tools = mcp._tool_manager.list_tools()
+        tools = await mcp.list_tools()
         names = [t.name for t in tools]
 
         assert "convert_to_markdown" in names

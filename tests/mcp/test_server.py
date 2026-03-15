@@ -11,9 +11,9 @@ from mcp.server.fastmcp.exceptions import ToolError
 from md_server.mcp.server import convert_to_markdown, get_converter, mcp
 
 
-def _get_tool():
+async def _get_tool():
     """Get the convert_to_markdown tool from FastMCP."""
-    tools = mcp._tool_manager.list_tools()
+    tools = await mcp.list_tools()
     return next(t for t in tools if t.name == "convert_to_markdown")
 
 
@@ -21,27 +21,31 @@ def _get_tool():
 class TestMCPServer:
     """Test MCP server functionality."""
 
-    def test_tool_is_registered(self):
+    @pytest.mark.asyncio
+    async def test_tool_is_registered(self):
         """convert_to_markdown should be registered as a tool."""
-        tools = mcp._tool_manager.list_tools()
+        tools = await mcp.list_tools()
         names = [t.name for t in tools]
         assert "convert_to_markdown" in names
 
-    def test_tool_has_no_output_schema(self):
+    @pytest.mark.asyncio
+    async def test_tool_has_no_output_schema(self):
         """Tool should not have an output schema (avoids Claude Code bug)."""
-        tool = _get_tool()
-        assert tool.output_schema is None
+        tool = await _get_tool()
+        assert tool.outputSchema is None
 
-    def test_tool_has_readonly_annotation(self):
+    @pytest.mark.asyncio
+    async def test_tool_has_readonly_annotation(self):
         """Tool should have readOnlyHint annotation."""
-        tool = _get_tool()
+        tool = await _get_tool()
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
 
-    def test_tool_has_expected_parameters(self):
+    @pytest.mark.asyncio
+    async def test_tool_has_expected_parameters(self):
         """Tool should have all expected input parameters."""
-        tool = _get_tool()
-        props = tool.parameters.get("properties", {})
+        tool = await _get_tool()
+        props = tool.inputSchema.get("properties", {})
         expected = [
             "url",
             "file_content",
@@ -58,10 +62,11 @@ class TestMCPServer:
         for param in expected:
             assert param in props, f"missing parameter: {param}"
 
-    def test_tool_has_output_format_default(self):
+    @pytest.mark.asyncio
+    async def test_tool_has_output_format_default(self):
         """Tool should have output_format with default 'markdown'."""
-        tool = _get_tool()
-        props = tool.parameters.get("properties", {})
+        tool = await _get_tool()
+        props = tool.inputSchema.get("properties", {})
         assert "output_format" in props
         assert props["output_format"]["default"] == "markdown"
 
