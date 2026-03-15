@@ -40,9 +40,9 @@ For JavaScript-rendered pages, install browsers: `uvx playwright install --with-
 }
 ```
 
-## The `read_resource` Tool
+## The `convert_to_markdown` Tool
 
-Once configured, your AI gets access to the **`read_resource`** tool which reads URLs or files and converts them to markdown.
+Once configured, your AI gets access to the **`convert_to_markdown`** tool which reads URLs or files and converts them to markdown.
 
 ### Input Options
 
@@ -146,16 +146,6 @@ For local AI tools (Claude Desktop, Cursor):
 ```bash
 uvx md-server[mcp] --mcp-stdio
 ```
-
-### SSE
-
-For network-based AI agents:
-
-```bash
-uvx md-server[mcp] --mcp-sse --port 9000
-```
-
-Endpoints: `GET /health`, `GET /sse`, `POST /messages`
 
 ## Environment Variables
 

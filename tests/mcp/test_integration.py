@@ -5,26 +5,28 @@ import json
 import base64
 from unittest.mock import patch, AsyncMock, MagicMock
 
+from mcp.server.fastmcp.exceptions import ToolError
+
 
 @pytest.mark.unit
 class TestMCPServerIntegration:
     """Integration tests for MCP server tool calls."""
 
     @pytest.mark.asyncio
-    async def test_list_tools_returns_read_resource(self):
-        """list_tools should return read_resource tool."""
-        from md_server.mcp.server import list_tools
+    async def test_tool_is_registered(self):
+        """Tool listing should include convert_to_markdown."""
+        from md_server.mcp.server import mcp
 
-        tools = await list_tools()
+        tools = await mcp.list_tools()
         names = [t.name for t in tools]
 
-        assert "read_resource" in names
+        assert "convert_to_markdown" in names
         assert len(tools) == 1
 
     @pytest.mark.asyncio
-    async def test_call_read_resource_url_success(self):
-        """call_tool should handle read_resource with url successfully."""
-        from md_server.mcp.server import call_tool
+    async def test_convert_url_success(self):
+        """convert_to_markdown should handle url successfully."""
+        from md_server.mcp.server import convert_to_markdown
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
@@ -45,20 +47,18 @@ class TestMCPServerIntegration:
             )
             mock_get.return_value = mock_conv
 
-            result = await call_tool(
-                "read_resource",
-                {"url": "https://example.com", "output_format": "json"},
+            result = await convert_to_markdown(
+                url="https://example.com", output_format="json"
             )
 
-            assert len(result) == 1
-            data = json.loads(result[0].text)
+            data = json.loads(result)
             assert data["success"] is True
             assert data["title"] == "Test Page"
 
     @pytest.mark.asyncio
-    async def test_call_read_resource_with_render_js(self):
-        """call_tool should pass render_js to handler."""
-        from md_server.mcp.server import call_tool
+    async def test_convert_with_render_js(self):
+        """convert_to_markdown should pass render_js to handler."""
+        from md_server.mcp.server import convert_to_markdown
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
@@ -71,17 +71,15 @@ class TestMCPServerIntegration:
             )
             mock_get.return_value = mock_conv
 
-            await call_tool(
-                "read_resource", {"url": "https://example.com", "render_js": True}
-            )
+            await convert_to_markdown(url="https://example.com", render_js=True)
 
             call_kwargs = mock_conv.convert_url.call_args.kwargs
             assert call_kwargs["js_rendering"] is True
 
     @pytest.mark.asyncio
-    async def test_call_read_resource_file_success(self):
-        """call_tool should handle read_resource with file_content successfully."""
-        from md_server.mcp.server import call_tool
+    async def test_convert_file_success(self):
+        """convert_to_markdown should handle file_content successfully."""
+        from md_server.mcp.server import convert_to_markdown
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
@@ -105,79 +103,66 @@ class TestMCPServerIntegration:
             mock_get.return_value = mock_conv
 
             content_b64 = base64.b64encode(b"fake pdf data").decode()
-            result = await call_tool(
-                "read_resource",
-                {
-                    "file_content": content_b64,
-                    "filename": "test.pdf",
-                    "output_format": "json",
-                },
+            result = await convert_to_markdown(
+                file_content=content_b64,
+                filename="test.pdf",
+                output_format="json",
             )
 
-            data = json.loads(result[0].text)
+            data = json.loads(result)
             assert data["success"] is True
             assert data["source"] == "test.pdf"
 
-    # --- Input Validation Error Tests (consolidated) ---
+    # --- Input Validation Error Tests ---
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "args,test_id",
-        [
-            ({}, "missing_both"),  # neither url nor file_content
-            (
-                {"file_content": base64.b64encode(b"data").decode()},
-                "missing_filename",
-            ),  # missing filename
-            (
-                {
-                    "url": "https://example.com",
-                    "file_content": base64.b64encode(b"data").decode(),
-                    "filename": "test.pdf",
-                },
-                "both_url_and_file",
-            ),  # both url and file_content
-            (
-                {"file_content": "not-valid-base64!!!", "filename": "test.pdf"},
-                "invalid_base64",
-            ),  # invalid base64
-        ],
-        ids=["missing_both", "missing_filename", "both_url_and_file", "invalid_base64"],
-    )
-    async def test_invalid_input_returns_error(self, args, test_id):
-        """call_tool should return error for invalid inputs."""
-        from md_server.mcp.server import call_tool
+    async def test_error_missing_input(self):
+        """Should raise ToolError when no input provided."""
+        from md_server.mcp.server import convert_to_markdown
 
-        result = await call_tool("read_resource", args)
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "INVALID_INPUT"
+        with pytest.raises(ToolError):
+            await convert_to_markdown()
 
     @pytest.mark.asyncio
-    async def test_call_unknown_tool(self):
-        """call_tool should return error for unknown tool."""
-        from md_server.mcp.server import call_tool
+    async def test_error_missing_filename(self):
+        """Should raise ToolError when file_content without filename."""
+        from md_server.mcp.server import convert_to_markdown
 
-        result = await call_tool("unknown_tool", {})
-
-        data = json.loads(result[0].text)
-        assert data["success"] is False
-        assert data["error"]["code"] == "UNKNOWN_TOOL"
-        assert "read_resource" in str(data["error"]["suggestions"])
+        content = base64.b64encode(b"data").decode()
+        with pytest.raises(ToolError):
+            await convert_to_markdown(file_content=content)
 
     @pytest.mark.asyncio
-    async def test_response_is_json_string(self):
-        """call_tool should return JSON string in TextContent."""
-        from md_server.mcp.server import call_tool
+    async def test_error_both_inputs(self):
+        """Should raise ToolError when both url and file_content provided."""
+        from md_server.mcp.server import convert_to_markdown
 
-        result = await call_tool("unknown_tool", {})
+        content = base64.b64encode(b"data").decode()
+        with pytest.raises(ToolError):
+            await convert_to_markdown(
+                url="https://example.com",
+                file_content=content,
+                filename="test.pdf",
+            )
 
-        assert len(result) == 1
-        assert result[0].type == "text"
-        # Should be valid JSON
-        data = json.loads(result[0].text)
-        assert isinstance(data, dict)
+    @pytest.mark.asyncio
+    async def test_error_invalid_base64(self):
+        """Should raise ToolError for invalid base64."""
+        from md_server.mcp.server import convert_to_markdown
+
+        with pytest.raises(ToolError, match="base64"):
+            await convert_to_markdown(
+                file_content="not-valid-base64!!!",
+                filename="test.pdf",
+            )
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_error_suggests_convert(self):
+        """Unknown tool error should suggest convert_to_markdown."""
+        from md_server.mcp.errors import unknown_tool_error
+
+        result = unknown_tool_error("bad_tool")
+        assert "convert_to_markdown" in str(result.error.suggestions)
 
 
 @pytest.mark.unit
@@ -187,7 +172,7 @@ class TestMCPResponseFormat:
     @pytest.mark.asyncio
     async def test_success_response_structure(self):
         """Success responses (JSON format) should have consistent structure."""
-        from md_server.mcp.server import call_tool
+        from md_server.mcp.server import convert_to_markdown
 
         with patch("md_server.mcp.server.get_converter") as mock_get:
             mock_conv = MagicMock()
@@ -208,12 +193,11 @@ class TestMCPResponseFormat:
             )
             mock_get.return_value = mock_conv
 
-            result = await call_tool(
-                "read_resource",
-                {"url": "https://example.com", "output_format": "json"},
+            result = await convert_to_markdown(
+                url="https://example.com", output_format="json"
             )
 
-            data = json.loads(result[0].text)
+            data = json.loads(result)
             # Check required fields
             assert "success" in data
             assert "title" in data
@@ -223,17 +207,9 @@ class TestMCPResponseFormat:
             assert "metadata" in data
 
     @pytest.mark.asyncio
-    async def test_error_response_structure(self):
-        """Error responses should have consistent structure."""
-        from md_server.mcp.server import call_tool
+    async def test_error_raises_tool_error(self):
+        """Errors should raise ToolError (not return JSON error response)."""
+        from md_server.mcp.server import convert_to_markdown
 
-        result = await call_tool("unknown_tool", {})
-
-        data = json.loads(result[0].text)
-        # Check required fields
-        assert "success" in data
-        assert data["success"] is False
-        assert "error" in data
-        assert "code" in data["error"]
-        assert "message" in data["error"]
-        assert "suggestions" in data["error"]
+        with pytest.raises(ToolError):
+            await convert_to_markdown()

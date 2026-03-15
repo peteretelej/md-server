@@ -67,7 +67,7 @@ Add to your MCP configuration:
 
 The first run downloads dependencies and may take a minute.
 
-Once configured, your AI gets the **`read_resource`** tool:
+Once configured, your AI gets the **`convert_to_markdown`** tool:
 
 - Fetch web pages, articles, documentation, online PDFs via URL
 - Read uploaded documents (PDF, DOCX, XLSX, PPTX, images with OCR)

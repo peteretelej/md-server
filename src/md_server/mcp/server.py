@@ -1,22 +1,20 @@
-"""MCP server implementation for md-server."""
+"""MCP server implementation for md-server using FastMCP."""
 
-import asyncio
 import base64
 import logging
-from typing import Any
+import time
 
-from mcp.server import Server
-from mcp.types import TextContent, Tool
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp.exceptions import ToolError
 
 from ..core.converter import DocumentConverter
 from ..core.config import get_settings
-from .tools import TOOLS
 from .handlers import handle_read_resource
-from .errors import unknown_tool_error, invalid_input_error
+from .models import MCPErrorResponse
 
 logger = logging.getLogger(__name__)
 
-server = Server("md-server")
+mcp = FastMCP("md-server")
 
 
 def get_converter() -> DocumentConverter:
@@ -28,132 +26,135 @@ def get_converter() -> DocumentConverter:
     )
 
 
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    """Return available MCP tools."""
-    return TOOLS
+@mcp.tool(
+    annotations={"readOnlyHint": True},
+    structured_output=False,
+)
+async def convert_to_markdown(
+    url: str | None = None,
+    file_content: str | None = None,
+    filename: str | None = None,
+    render_js: bool = False,
+    max_length: int | None = None,
+    max_tokens: int | None = None,
+    truncate_mode: str | None = None,
+    truncate_limit: int | None = None,
+    timeout: int | None = None,
+    include_frontmatter: bool = True,
+    output_format: str = "markdown",
+    ctx: Context | None = None,
+) -> str:
+    """Read a URL or file and convert to markdown.
 
+    Provide ONE of:
+    - url: Webpage, online PDF, or Google Doc
+    - file_content + filename: Base64-encoded file
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+    Supported formats: PDF, DOCX, XLSX, PPTX, HTML, images (OCR), and more.
+
+    For JavaScript-heavy pages (SPAs, dashboards), set render_js: true.
+    This adds ~15-30 seconds but captures dynamically loaded content.
+
+    Returns markdown by default, or structured JSON with metadata (set output_format: "json").
     """
-    Handle MCP tool calls.
+    start_time = time.monotonic()
+    input_type = "url" if url else "file"
+    logger.info(
+        "convert_to_markdown: input_type=%s, render_js=%s", input_type, render_js
+    )
 
-    Args:
-        name: Tool name ("read_resource")
-        arguments: Tool arguments
+    if render_js and ctx:
+        await ctx.info("Converting URL with JS rendering, this may take 15-30s...")
 
-    Returns:
-        List of TextContent with response (raw markdown or JSON)
-    """
     converter = get_converter()
-    output_format = arguments.get("output_format", "markdown")
 
-    if name == "read_resource":
-        # Extract file_content and decode if present
-        file_content_b64 = arguments.get("file_content")
-        file_content = None
+    # Decode base64 file_content if present
+    decoded_content = None
+    if file_content is not None:
+        # Estimate decoded size before allocating memory
+        estimated_size = len(file_content) * 3 / 4
+        settings = get_settings()
+        if estimated_size > settings.max_file_size:
+            raise ToolError(
+                f"File too large: ~{estimated_size / 1048576:.1f}MB exceeds "
+                f"{settings.max_file_size / 1048576:.0f}MB limit"
+            )
+        try:
+            decoded_content = base64.b64decode(file_content)
+        except Exception:
+            raise ToolError(
+                "Invalid base64 file_content. Content must be base64-encoded."
+            )
 
-        if file_content_b64 is not None:
-            try:
-                file_content = base64.b64decode(file_content_b64)
-            except Exception:
-                result = invalid_input_error(
-                    "Invalid base64 file_content. Content must be base64-encoded."
-                )
-                return [TextContent(type="text", text=result.model_dump_json())]
-
+    try:
         result = await handle_read_resource(
             converter=converter,
-            url=arguments.get("url"),
-            file_content=file_content,
-            filename=arguments.get("filename"),
-            render_js=arguments.get("render_js", False),
-            max_length=arguments.get("max_length"),
-            max_tokens=arguments.get("max_tokens"),
-            truncate_mode=arguments.get("truncate_mode"),
-            truncate_limit=arguments.get("truncate_limit"),
-            timeout=arguments.get("timeout"),
-            include_frontmatter=arguments.get("include_frontmatter", True),
+            url=url,
+            file_content=decoded_content,
+            filename=filename,
+            render_js=render_js,
+            max_length=max_length,
+            max_tokens=max_tokens,
+            truncate_mode=truncate_mode,
+            truncate_limit=truncate_limit,
+            timeout=timeout,
+            include_frontmatter=include_frontmatter,
             output_format=output_format,
         )
-    else:
-        result = unknown_tool_error(name)
+    except Exception:
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        logger.error(
+            "convert_to_markdown: error, input_type=%s, duration_ms=%d",
+            input_type,
+            duration_ms,
+        )
+        raise
 
-    # Return raw markdown string or JSON-serialized response
+    duration_ms = int((time.monotonic() - start_time) * 1000)
+
+    # If the handler returned an error response, raise it as a ToolError
+    # so FastMCP sets isError: true on the MCP response
+    if isinstance(result, MCPErrorResponse):
+        logger.warning(
+            "convert_to_markdown: error_code=%s, input_type=%s, duration_ms=%d",
+            result.error.code,
+            input_type,
+            duration_ms,
+        )
+        msg = result.error.message
+        if result.error.suggestions:
+            msg += "\n\nSuggestions:\n" + "\n".join(
+                f"- {s}" for s in result.error.suggestions
+            )
+        if ctx:
+            await ctx.error(f"Conversion failed: {result.error.message}")
+        raise ToolError(msg)
+
+    # For markdown output, result is a plain string
     if isinstance(result, str):
-        return [TextContent(type="text", text=result)]
-    return [TextContent(type="text", text=result.model_dump_json())]
+        logger.info(
+            "convert_to_markdown: success, input_type=%s, duration_ms=%d, length=%d",
+            input_type,
+            duration_ms,
+            len(result),
+        )
+        return result
+
+    # For JSON output, serialize the MCPSuccessResponse
+    response_json = result.model_dump_json()
+    logger.info(
+        "convert_to_markdown: success, input_type=%s, duration_ms=%d, format=json",
+        input_type,
+        duration_ms,
+    )
+    return response_json
 
 
 def run_stdio() -> None:
-    """
-    Run MCP server over stdin/stdout.
-
-    Used for local IDE integration (Claude Desktop, Cursor).
-    """
-    from mcp.server.stdio import stdio_server
-
-    async def main() -> None:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
-        logger.info("Starting md-server MCP (stdio transport)")
-
-        async with stdio_server() as (read_stream, write_stream):
-            await server.run(
-                read_stream,
-                write_stream,
-                server.create_initialization_options(),
-            )
-
-    asyncio.run(main())
-
-
-def run_sse(host: str = "0.0.0.0", port: int = 8080) -> None:
-    """
-    Run MCP server over Server-Sent Events.
-
-    Used for network-based AI agents.
-
-    Args:
-        host: Bind host
-        port: Bind port
-    """
-    from mcp.server.sse import SseServerTransport
-    from starlette.applications import Starlette
-    from starlette.routing import Route
-    from starlette.responses import JSONResponse
-    import uvicorn
-
+    """Run MCP server over stdin/stdout."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    logger.info("Starting md-server MCP (SSE transport) on %s:%d", host, port)
-
-    sse_transport = SseServerTransport("/messages")
-
-    async def handle_sse(request: Any) -> None:
-        async with sse_transport.connect_sse(
-            request.scope, request.receive, request._send
-        ) as streams:
-            await server.run(
-                streams[0],
-                streams[1],
-                server.create_initialization_options(),
-            )
-
-    async def health(request: Any) -> JSONResponse:
-        return JSONResponse({"status": "healthy", "mode": "mcp-sse"})
-
-    app = Starlette(
-        routes=[
-            Route("/health", endpoint=health, methods=["GET"]),
-            Route("/sse", endpoint=handle_sse),
-            sse_transport.handle_post_message,
-        ]
-    )
-
-    uvicorn.run(app, host=host, port=port)
+    logger.info("Starting md-server MCP (stdio transport)")
+    mcp.run(transport="stdio")

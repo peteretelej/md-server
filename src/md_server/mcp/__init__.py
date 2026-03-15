@@ -1,6 +1,13 @@
-"""MCP server module for md-server."""
+"""MCP server module for md-server.
 
-from .tools import READ_RESOURCE_TOOL, TOOLS
-from .server import run_stdio, run_sse
+Public API:
+    run_stdio: Run the MCP server over stdin/stdout.
 
-__all__ = ["READ_RESOURCE_TOOL", "TOOLS", "run_stdio", "run_sse"]
+Note: SSE transport (run_sse), READ_RESOURCE_TOOL, and TOOLS were intentionally
+removed as part of the FastMCP modernization. The server now uses FastMCP's
+decorator-based tool registration instead of manual tool definitions.
+"""
+
+from .server import run_stdio
+
+__all__ = ["run_stdio"]
